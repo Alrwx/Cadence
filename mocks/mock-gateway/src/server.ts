@@ -45,11 +45,18 @@ interface Session {
   turnId: string;
   clipTexts: Map<string, string>;
   groups: PhrasesGroup[];
-  timers: NodeJS.Timeout[];
+  unlocked: boolean;
 }
 
 const sessions = new Map<string, Session>();
 let clipCounter = 0;
+// tsx watch restarts on every edit, and clients still hold ids from the previous run.
+const idBase = Date.now().toString(36);
+let idCounter = 0;
+
+function newId(prefix: string): string {
+  return `${prefix}_${idBase}_${++idCounter}`;
+}
 
 function getSession(id: string): Session {
   let s = sessions.get(id);
@@ -67,11 +74,18 @@ function getSession(id: string): Session {
             { id: "ph_water", text: "I need some water", icon: "water", audioReady: true },
             { id: "ph_restroom", text: "I need to use the restroom", audioReady: true },
             { id: "ph_pain", text: "I'm in pain", audioReady: true },
+            { id: "ph_family", text: "Can you call my family?", audioReady: true },
           ],
+        },
+        // Starter groups match AGENTS(GH).md; "Demo" opens the judge demo.
+        {
+          id: "pg_demo",
+          name: "Demo",
+          items: [{ id: "ph_judges", text: "Hi judges, I'll be demoing Cadence", audioReady: true }],
         },
         { id: "pg_home", name: "Home", items: [{ id: "ph_love", text: "I love you", audioReady: true }] },
       ],
-      timers: [],
+      unlocked: false,
     };
     sessions.set(id, s);
   }
@@ -84,21 +98,21 @@ function send<T extends EventType>(s: Session, to: Target, type: T, data: EventD
   for (const role of roles) s.clients[role]?.send(frame);
 }
 
+function sendPhrases(s: Session, to: Target): void {
+  send(s, to, "phrases", { groups: s.groups });
+}
+
 function runScenario(s: Session): void {
-  s.timers.forEach(clearTimeout);
-  s.timers = [];
   let at = 0;
   for (const step of scenario.steps) {
     at += step.afterMs;
-    s.timers.push(setTimeout(() => send(s, step.to, step.type, step.data), at));
+    setTimeout(() => send(s, step.to, step.type, step.data), at);
   }
   if (scenario.disconnectAfterMs !== undefined) {
-    s.timers.push(
-      setTimeout(() => {
-        console.log("scenario: dropping all connections");
-        for (const ws of Object.values(s.clients)) ws?.terminate();
-      }, scenario.disconnectAfterMs),
-    );
+    setTimeout(() => {
+      console.log("scenario: dropping all connections");
+      for (const ws of Object.values(s.clients)) ws?.terminate();
+    }, scenario.disconnectAfterMs);
   }
 }
 
@@ -117,9 +131,12 @@ for (const step of scenario.steps) {
 }
 const INSTANT_TEXT: Record<string, string> = { yes: "Yes", no: "No", wait: "Give me a second", hello: "Hello", laugh: "Ha ha" };
 
-function handle(s: Session, event: CadenceEvent): void {
+function handle(s: Session, from: Role, event: CadenceEvent): void {
   switch (event.type) {
     case "phone.unlock":
+      // Clients re-send this on every reconnect; like the real gateway (Start only from IDLE), only the first one counts.
+      if (s.unlocked) break;
+      s.unlocked = true;
       runScenario(s);
       break;
     case "select":
@@ -135,13 +152,41 @@ function handle(s: Session, event: CadenceEvent): void {
     }
     case "phrase.save": {
       const group = s.groups.find((g) => g.id === event.data.groupId);
-      group?.items.push({ id: `ph_${Date.now()}`, text: event.data.text, audioReady: true });
-      send(s, "headset", "phrases", { groups: s.groups });
+      if (!group) {
+        send(s, from, "error", { code: "unknown_group", message: "That group no longer exists.", recoverable: true });
+        break;
+      }
+      group.items.push({ id: newId("ph"), text: event.data.text, audioReady: true });
+      sendPhrases(s, "all");
       break;
     }
+    case "phrase.group.save": {
+      const { groupId, name, order } = event.data;
+      if (order !== undefined && !Number.isInteger(order)) {
+        send(s, from, "error", { code: "invalid_order", message: "Group order must be a whole number.", recoverable: true });
+        break;
+      }
+      let group = s.groups.find((g) => g.id === groupId);
+      if (groupId === undefined) s.groups.push((group = { id: newId("pg"), name, items: [] }));
+      else if (group) group.name = name;
+      else {
+        send(s, from, "error", { code: "unknown_group", message: "That group no longer exists.", recoverable: true });
+        break;
+      }
+      if (order !== undefined) {
+        s.groups.splice(s.groups.indexOf(group), 1);
+        s.groups.splice(Math.max(0, Math.min(order, s.groups.length)), 0, group);
+      }
+      sendPhrases(s, "all");
+      break;
+    }
+    case "phrase.group.delete":
+      s.groups = s.groups.filter((g) => g.id !== event.data.groupId);
+      sendPhrases(s, "all");
+      break;
     case "phrase.delete":
       for (const g of s.groups) g.items = g.items.filter((p) => p.id !== event.data.phraseId);
-      send(s, "headset", "phrases", { groups: s.groups });
+      sendPhrases(s, "all");
       break;
     case "compose.start":
       send(s, "all", "state", { state: "COMPOSING" });
@@ -188,7 +233,7 @@ wss.on("connection", (ws, req) => {
   s.clients[role] = ws;
   console.log(`connected ${role} (session ${sessionId})`);
   send(s, role, "state", { state: "IDLE" });
-  if (role === "headset") send(s, "headset", "phrases", { groups: s.groups });
+  sendPhrases(s, role);
 
   ws.on("message", (raw, isBinary) => {
     if (isBinary) return; // phone mic frames; the mock ignores audio
@@ -198,7 +243,7 @@ wss.on("connection", (ws, req) => {
         console.warn("ignoring unknown event", event.type);
         return;
       }
-      handle(s, event);
+      handle(s, role, event);
     } catch (err) {
       console.warn("ignoring malformed event", err);
     }
