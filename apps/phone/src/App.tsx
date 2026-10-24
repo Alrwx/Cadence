@@ -50,12 +50,13 @@ function Main({ audio, micError }: { audio: PhoneAudio; micError: string | null 
   const captions = useCadence((s) => s.captions);
   const partial = useCadence((s) => s.partial);
   const nowPlaying = useCadence((s) => s.nowPlaying);
-  const played = useRef(new Set<string>());
+  const lastPlayed = useRef<typeof nowPlaying>(null);
 
-  // Play each audio.play clip once, then report audio.done.
+  // Play each audio.play event once, then report audio.done. Compare events, not clip ids: cached clips
+  // are reused, so saying "Yes" twice sends the same clipId twice. (The ref also absorbs StrictMode's double effect.)
   useEffect(() => {
-    if (!nowPlaying || played.current.has(nowPlaying.clipId)) return;
-    played.current.add(nowPlaying.clipId);
+    if (!nowPlaying || lastPlayed.current === nowPlaying) return;
+    lastPlayed.current = nowPlaying;
     audio
       .play(nowPlaying.url)
       .catch((err) => console.error("playback failed", err))
