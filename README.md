@@ -2,6 +2,13 @@
 
 Head-pointing communication for people who can't speak right now (intubated, post-surgery, post-stroke). Ray-Ban Meta Gen 2 glasses stream camera, motion and speech to an iPhone. The user points their head at an object, Gemma suggests phrases, a head tilt picks one, and it plays in the user's own cloned voice.
 
+## Features
+
+- **Saved phrases (bookmarks).** Users save phrases they say often, grouped by context, and play them in one action without waiting for suggestions. A patient in a hospital might keep "I need some water" and "I need to use the restroom" ready for when the nurse comes in. Phrases can be typed in or bookmarked right after they're spoken, and each one is synthesized once when it's saved so it plays instantly.
+- **Saved conversations (stretch goal).** Users can save a conversation, such as a doctor's appointment, with a label and attach it to a later conversation. A summary of it is passed to Gemma, so suggestions on the next visit remember what was discussed. Saving is opt-in per conversation, needs chat-storage consent, and saved conversations can be deleted at any time.
+
+See `AGENTS(GH).md` for the event contracts and who owns each piece.
+
 ## Layout
 
 | Path | What lives there |

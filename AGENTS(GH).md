@@ -16,6 +16,20 @@ An assistive communication app for people who **can't speak or struggle to speak
 3. The user, wearing a **Meta Quest 3S** in passthrough (they still see the room and the person), picks a reply with their **hands** (pinch, poke, or a quick gesture).
 4. The reply is spoken from the phone **in the user's own voice**, cloned from a few seconds of old audio (a voicemail or home video), or in a consented voice they choose.
 
+### Saved phrases (core feature)
+Users can **bookmark phrases** they say often, grouped by context, so they're one pinch away without waiting for suggestions. Example: a patient in a hospital keeps a "Hospital" group with "I need some water", "I need to use the restroom", "I'm in pain", "Can you call my family?" and uses it when the nurse comes in.
+- Phrases can be added by typing, or by bookmarking a suggestion or typed reply right after it's spoken.
+- Each saved phrase is **pre-synthesized in the user's voice when it's saved**, so it plays as fast as the instant tier.
+- Groups (e.g. "Hospital", "Home", "Doctor") can be reordered, renamed, and deleted; phrases can be edited or removed.
+- Saved phrases are user-authored, not conversation content, so they don't need `store_chat` consent. They are still local-only.
+
+### Saved conversations (stretch goal)
+Users can **save a conversation** (e.g. a doctor's appointment) and reference it in later conversations, so the next visit's suggestions know what was discussed ("Did the new medication help?" → a reply that remembers which medication).
+- **Opt-in per conversation:** requires `store_chat` consent *and* an explicit "Save this conversation" action with a label (e.g. "Dr. Lee – Oct 24"). Nothing is saved by default.
+- Saved conversations are browsable (transcript + optional short summary) and **deletable at any time**; deletion removes transcript, summary, and any derived context.
+- At the start of a conversation the user can attach one or more saved conversations as context; the gateway passes a summary of them to `/suggest`.
+- Local-only like everything else; never sent to a remote API.
+
 **Why AR and not a tablet:** reply options float beside the listener's face, so the user keeps eye contact instead of looking down at a screen. The listener sees an "I'm answering" indicator on the phone so silence isn't mistaken for "done."
 
 ### Demo goal (the one flow that must always work)
@@ -82,6 +96,7 @@ Don't wait for the speaker to finish.
 | Tier | Example | Target | How |
 |---|---|---|---|
 | Instant | "Yes", "No", laugh, "Give me a second" | < 1 s | Pre-synthesized at voice-creation time, triggered by gestures |
+| Saved | "I need some water", "I need to use the restroom" | < 1 s | User-bookmarked phrases, pre-synthesized when saved, picked from the saved-phrases panel |
 | Quick | The 3 suggested replies | 2–3 s after the speaker stops | Speculation (above) |
 | Composed | "Type my own" | User-paced | Virtual keyboard / word board in XR, TTS on submit |
 
@@ -184,10 +199,25 @@ Every JSON event has this envelope:
 | `compose.start` | headset → gw | `{}` |
 | `compose.submit` | headset → gw | `{ text }` |
 | `cancel` | headset → gw | `{}` (back out of choosing/composing) |
-| `audio.play` | gw → phone | `{ clipId, url: "/clips/<id>.wav", text, source: "suggestion"\|"instant"\|"typed" }` |
+| `phrases` | gw → headset | `{ groups: [{ id, name, items: [{ id, text, icon?, audioReady: bool }] }] }` (sent on connect and after any change) |
+| `phrase.speak` | headset → gw | `{ phraseId }` |
+| `phrase.save` | headset → gw | `{ text, groupId, fromClipId? }` (`fromClipId` bookmarks a reply that was just spoken) |
+| `phrase.delete` | headset → gw | `{ phraseId }` |
+| `phrase.group.save` | headset → gw | `{ groupId?, name, order? }` (create or rename) |
+| `phrase.group.delete` | headset → gw | `{ groupId }` |
+| `audio.play` | gw → phone | `{ clipId, url: "/clips/<id>.wav", text, source: "suggestion"\|"instant"\|"saved"\|"typed" }` |
 | `audio.done` | phone → gw | `{ clipId }` |
 | `phone.unlock` | phone → gw | `{}` (user tapped "Start"; audio autoplay is now allowed) |
 | `error` | gw → client | `{ code, message, recoverable: bool }` |
+
+**Stretch (saved conversations), add once the core is stable:**
+
+| Event | Direction | `data` |
+|---|---|---|
+| `conversation.save` | headset → gw | `{ label }` (rejected with `error` unless `store_chat` consent exists) |
+| `conversations` | gw → headset | `{ items: [{ id, label, startedAt, summary? }] }` |
+| `conversation.attach` | headset → gw | `{ conversationIds: [] }` (use as context for this session) |
+| `conversation.delete` | headset → gw | `{ conversationId }` |
 
 Rules:
 - Unknown event types are **ignored and logged**, never crashes.
@@ -199,7 +229,8 @@ Rules:
 |---|---|---|
 | `GET /health` | – | `{ stt, suggest, tts: "ready"\|"loading"\|"error", backend }` |
 | `WS /stt` | binary PCM16 16 kHz frames | JSON `{ kind: "partial"\|"final", text }` |
-| `POST /suggest` | `{ turnId, history: [{speaker, text}], style: {phrases[], tone}, n: 3 }` | `{ turnId, items: [{ text, kind }] , ms }` |
+| `POST /suggest` | `{ turnId, history: [{speaker, text}], style: {phrases[], tone}, context?: [{ label, summary }], n: 3 }` | `{ turnId, items: [{ text, kind }] , ms }` (`context` = attached saved conversations, stretch) |
+| `POST /summarize` *(stretch)* | `{ turns: [{speaker, text}] }` | `{ summary, ms }` |
 | `POST /tts` | `{ voiceId, text }` | `audio/wav` body, header `X-Gen-Ms` |
 | `POST /voices` | multipart: `audio`, `transcript`, `consentId` | `{ voiceId }` |
 | `DELETE /voices/{voiceId}` | – | `204` (deletes cached voice prompt) |
@@ -220,8 +251,10 @@ Each role lists **scope**, **owned paths**, **done means**, and **notes for your
 - Gestures for the instant tier, detected from the 25 hand joints: thumbs-up = `yes`, thumbs-down = `no`, open palm = `wait`. **Avoid palm-pinch**, which the system reserves (it exits the app or opens the Quest menu).
 - Accessibility: large targets, a hold-to-confirm or debounce option, a snap-to-nearest assist, one-handed use, UI at chest/lap height to reduce arm fatigue, icon next to each reply.
 - "Type my own": a large word board or keyboard in XR.
+- Saved-phrases panel: one action to open, tabs per group, big phrase buttons; a "bookmark" button on the last spoken reply; add/edit/delete phrases and groups.
+- *(Stretch)* Saved conversations: a "Save this conversation" action with a label, a list of saved conversations, and a picker to attach them as context.
 
-**Done means:** against `mocks/mock-gateway`, a user can enter AR, see 3 replies, select one, fire each instant gesture, and compose a typed reply, with no console errors on Quest Browser.
+**Done means:** against `mocks/mock-gateway`, a user can enter AR, see 3 replies, select one, fire each instant gesture, speak and bookmark a saved phrase, and compose a typed reply, with no console errors on Quest Browser.
 **Agent notes:** test on desktop first with Meta's Immersive Web Emulator (it doesn't emulate passthrough or, likely, hand gestures). Keep gesture thresholds in one config file. Keep draw calls low; profile on the device weekly.
 
 ### Dev 2 — Phone experience + shared client (`apps/phone`, `apps/shared`, `mocks/mock-gateway`)
@@ -243,6 +276,7 @@ Each role lists **scope**, **owned paths**, **done means**, and **notes for your
 - TTS: Qwen3-TTS cloning via `mlx-audio`; a voice prompt cache keyed by `voiceId`; a `/voices` endpoint that pre-synthesizes the instant phrases.
 - Backend interface per model (`SttBackend`, `SuggestBackend`, `TtsBackend`) with MLX implementations, plus CUDA ones for the RTX 3080 server as a stretch.
 - `mocks/mock-models`: same endpoints, canned responses, configurable delays.
+- *(Stretch)* `/summarize` for saved conversations, and use of `context` summaries in the `/suggest` prompt (keep the added prompt short so latency holds).
 
 **Done means:** `/health` reports all ready on the M4 Pro; a script times STT, `/suggest`, and `/tts` for 20 sample turns and writes results to `docs/latency.md`.
 **Agent notes:** never send audio or text to a remote API unless `ALLOW_REMOTE_FALLBACK=1`. Pin model IDs in config. Log timings for every call. Strip anything that isn't JSON from model output and retry once on a parse failure.
@@ -251,7 +285,9 @@ Each role lists **scope**, **owned paths**, **done means**, and **notes for your
 **Scope:** the hub that ties everything together, plus the contracts and the demo.
 - Go gateway: TLS (mkcert certs in dev), serves the built `apps/*` as static files, the `/ws` hub, `/clips/{id}.wav`, and the state machine in §3.
 - Orchestration: forwards phone audio to `WS /stt`, debounces partials, calls `/suggest`, and speculatively calls `/tts` for the top 3; cancels stale work by `turnId`.
-- SQLite schema and migrations: `person`, `voice_profile`, `consent`, `phrase_clip`, `contact`, `session`, `turn` (content only with `store_chat` consent), `audit_log`, `metric`.
+- SQLite schema and migrations: `person`, `voice_profile`, `consent`, `phrase_clip`, `phrase_group`, `saved_phrase`, `contact`, `session`, `turn` (content only with `store_chat` consent), `audit_log`, `metric`. Stretch: `saved_conversation` (label, session ref, summary).
+- Saved phrases: CRUD over the `phrase.*` events, synthesize a clip via `/tts` on save (and re-synthesize when the voice changes), serve them like instant clips.
+- *(Stretch)* Saved conversations: persist the session's turns on `conversation.save` (only with `store_chat`), call `/summarize`, pass attached summaries to `/suggest`; deleting a conversation or revoking `store_chat` deletes all of it.
 - Consent flow endpoints and revoke-deletes-everything behavior.
 - `packages/protocol`: schemas, generation scripts (TS + Go), examples, and contract tests.
 - Root `Makefile`: `make dev` (all services with mocks toggles), `make demo`, `make test`.
@@ -312,8 +348,9 @@ Quest testing: same Wi-Fi as the laptop → open the HTTPS URL in Quest Browser 
 | **M0 – Skeleton** | Repo, protocol v1 schemas + examples, mocks running, `make dev` starts everything |
 | **M1 – Spikes** | Voice clone + TTS timing on the M4 Pro; Gemma suggestion quality check; hand pinch working in `immersive-ar` on the Quest |
 | **M2 – Vertical slice** | Real phone mic → STT → suggestions → pinch → clip plays (no speculation yet) |
-| **M3 – Fast path** | Speculative TTS, instant gestures, "I'm answering" ring, consent flow |
+| **M3 – Fast path** | Speculative TTS, instant gestures, saved phrases, "I'm answering" ring, consent flow |
 | **M4 – Demo-ready** | Hotspot rehearsal 3× in a row, backup video recorded, metrics captured |
+| **M5 – Stretch** | Saved conversations: save with label, summarize, attach as context to a later conversation |
 
 ---
 
