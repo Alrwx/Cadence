@@ -14,7 +14,14 @@ An assistive communication app for people who **can't speak or struggle to speak
 1. Someone talks to the user. A **phone** placed between them picks up the speech.
 2. The speech is transcribed, and an on-device language model suggests **three short replies** that fit the conversation and the user's personal style.
 3. The user, wearing a **Meta Quest 3S** in passthrough (they still see the room and the person), picks a reply with their **hands** (pinch, poke, or a quick gesture).
-4. The reply is spoken from the phone **in the user's own voice**, cloned from a few seconds of old audio (a voicemail or home video), or in a consented voice they choose.
+4. The reply is spoken from the phone **in the user's own voice**, cloned from a few seconds of old audio (a voicemail or home video) or a ~30-second sample recorded on the phone, or in a consented voice they choose.
+
+### Hands-free selection (core accessibility)
+Some users can't pinch reliably (one-sided weakness after a stroke, tremor, limited hand control). Everything selectable (replies, instant phrases, saved phrases, the word board) can also be picked **with head movement alone**:
+- A small reticle sits at the center of the user's view. Holding it on a target for a dwell time (default ~800 ms, shown as a filling ring) selects it.
+- Looking away before the ring fills cancels, and nothing selects while the head is moving quickly.
+- Dwell time, reticle size, and movement tolerance live in the same config file as the hand-gesture thresholds.
+- Input mode (hands, head, or both) is a per-user setting stored on the headset.
 
 ### Saved phrases (core feature)
 Users can **bookmark phrases** they say often, grouped by context, so they're one pinch away without waiting for suggestions. Example: a patient in a hospital keeps a "Hospital" group with "I need some water", "I need to use the restroom", "I'm in pain", "Can you call my family?" and uses it when the nurse comes in.
@@ -30,14 +37,27 @@ Users can **save a conversation** (e.g. a doctor's appointment) and reference it
 - At the start of a conversation the user can attach one or more saved conversations as context; the gateway passes a summary of them to `/suggest`.
 - Local-only like everything else; never sent to a remote API.
 
+### Quick memories (stretch goal)
+A lighter version of saved conversations. At any moment the user can pick **"Remember this"**, and the gateway summarizes the last ~60 seconds of the conversation into a short memory ("The nurse said the doctor visits at 3 pm."). The most recent memories go to `/suggest` automatically, so later suggestions can use them without attaching anything.
+- Requires `store_chat` consent. Only the summary is stored; the rolling 60-second transcript lives in gateway memory and is never written to disk.
+- Summaries keep names, numbers, times, and instructions exactly as said.
+- Memories are listed in a panel and deletable one by one; revoking `store_chat` deletes all of them.
+
+### Pointing at objects (stretch goal, blocked on camera access)
+The user holds the reticle on an object in the room (a cup, the TV remote, a blanket); the app recognizes it and the suggestions become requests about it ("Can you hand me the water?"). This needs frames from the Quest's passthrough cameras, and Quest Browser's WebXR doesn't expose them today (requesting the `camera-access` feature fails as of early 2026). Candidates to spike: `getUserMedia` in Quest Browser (reported to work, but frames aren't aligned with head pose), or the phone camera. **Don't start until a spike gets frames to the gateway.**
+
+### Languages
+English only for the demo, but nothing hard-codes it. Each person has a `locale` that is passed to `/stt`, `/suggest`, and `/tts`; saved phrases store their locale; UI strings in both apps come from locale-keyed files (`apps/shared/locales/en.json`). Adding a language later should be translation work, not plumbing.
+
 **Why AR and not a tablet:** reply options float beside the listener's face, so the user keeps eye contact instead of looking down at a screen. The listener sees an "I'm answering" indicator on the phone so silence isn't mistaken for "done."
 
 ### Demo goal (the one flow that must always work)
 1. Play a 10-second clip of a teammate's voice and create the clone (with the consent step).
-2. A judge asks the "patient" a question.
-3. The patient pinches a suggested reply; the phone speaks it in the cloned voice within a few seconds.
-4. The patient gives an instant thumbs-up; the phone says "Yes" in under a second.
-5. Replay the same exchange with a generic robot voice for contrast.
+2. The patient opens Saved phrases → Demo → "Hi judges, I'll be demoing Cadence"; the phone greets the judges in the cloned voice.
+3. A judge asks the "patient" a question.
+4. The patient pinches a suggested reply; the phone speaks it in the cloned voice within a few seconds.
+5. The patient gives an instant thumbs-up; the phone says "Yes" in under a second.
+6. Replay the same exchange with a generic robot voice for contrast.
 
 ---
 
@@ -124,7 +144,7 @@ IDLE → LISTENING ──(speech ends)──► SUGGESTING ──(suggestions re
 | Client state | Zustand | Shared store shape across both apps |
 | Protocol | JSON Schema in `packages/protocol` → generated TS types + Go structs | Single source of truth for events |
 | Gateway | **Go** (1.22+ `net/http` routing), `github.com/coder/websocket`, `modernc.org/sqlite` (pure Go, no cgo) | Serves built frontends + WSS + `/clips` |
-| Model service | **Python 3.12**, FastAPI, uvicorn, managed with **uv** | Binds to 127.0.0.1:8000 |
+| Model service | **Python 3.12**, FastAPI, uvicorn, managed with **uv**, `ffmpeg` | Binds to 127.0.0.1:8000; ffmpeg pulls the audio out of uploaded voice-sample videos |
 | STT (Mac) | `mlx-whisper` (large-v3-turbo; smaller model if memory is tight) | Fallback backend: `faster-whisper` on the CUDA server |
 | Suggestions | **Gemma 4 E4B, 4-bit** via MLX (`mlx-lm`) or Ollama | Try E2B if quality is equal; 12B fits in 24 GB but is slower |
 | TTS / cloning | **Qwen3-TTS 0.6B Base** via `mlx-audio` (community MLX port) | 1.7B Base for quality if fast enough. Fallback: official Qwen3-TTS on the RTX 3080 |
@@ -138,6 +158,7 @@ IDLE → LISTENING ──(speech ends)──► SUGGESTING ──(suggestions re
 - Gemma 4 E4B at 4-bit produces good 3-reply suggestions in < 1.5 s for short prompts.
 - `@react-three/xr` exposes hand joints and pinch "select" in Quest Browser's `immersive-ar` session.
 - Memory: all three models resident together use roughly 8–10 GB (rough estimate).
+- *(Pointing at objects only)* Gemma 4 E4B accepts image input well enough to name an object in a cropped camera frame.
 
 ---
 
@@ -219,6 +240,16 @@ Every JSON event has this envelope:
 | `conversation.attach` | headset → gw | `{ conversationIds: [] }` (use as context for this session) |
 | `conversation.delete` | headset → gw | `{ conversationId }` |
 
+**Stretch (quick memories):**
+
+| Event | Direction | `data` |
+|---|---|---|
+| `memory.save` | headset → gw | `{}` (summarize the last ~60 s; rejected with `error` unless `store_chat` consent exists) |
+| `memories` | gw → headset | `{ items: [{ id, summary, createdAt }] }` (sent on connect and after any change) |
+| `memory.delete` | headset → gw | `{ memoryId }` |
+
+Hands-free selection needs no new events: a dwell selection sends the same `select` / `instant` / `phrase.speak` as a pinch. Events for pointing at objects get defined after the camera spike.
+
 Rules:
 - Unknown event types are **ignored and logged**, never crashes.
 - Breaking changes bump `v`. Additive fields don't.
@@ -228,14 +259,14 @@ Rules:
 | Endpoint | Request | Response |
 |---|---|---|
 | `GET /health` | – | `{ stt, suggest, tts: "ready"\|"loading"\|"error", backend }` |
-| `WS /stt` | binary PCM16 16 kHz frames | JSON `{ kind: "partial"\|"final", text }` |
-| `POST /suggest` | `{ turnId, history: [{speaker, text}], style: {phrases[], tone}, context?: [{ label, summary }], n: 3 }` | `{ turnId, items: [{ text, kind }] , ms }` (`context` = attached saved conversations, stretch) |
-| `POST /summarize` *(stretch)* | `{ turns: [{speaker, text}] }` | `{ summary, ms }` |
-| `POST /tts` | `{ voiceId, text }` | `audio/wav` body, header `X-Gen-Ms` |
-| `POST /voices` | multipart: `audio`, `transcript`, `consentId` | `{ voiceId }` |
+| `WS /stt?locale=en` | binary PCM16 16 kHz frames | JSON `{ kind: "partial"\|"final", text }` |
+| `POST /suggest` | `{ turnId, history: [{speaker, text}], style: {phrases[], tone}, context?: [{ label, summary }], memories?: [string], locale?: "en", n: 3 }` | `{ turnId, items: [{ text, kind }] , ms }` (`context` = attached saved conversations, `memories` = recent quick memories; both stretch) |
+| `POST /summarize` *(stretch)* | `{ turns: [{speaker, text}], locale?: "en" }` | `{ summary, ms }` (used for saved conversations and quick memories) |
+| `POST /tts` | `{ voiceId, text, locale?: "en" }` | `audio/wav` body, header `X-Gen-Ms` |
+| `POST /voices` | multipart: `audio` (audio file, or video with an audio track), `transcript?`, `consentId` | `{ voiceId }` (no `transcript` → the service transcribes the sample with STT) |
 | `DELETE /voices/{voiceId}` | – | `204` (deletes cached voice prompt) |
 
-The gateway owns timeouts: `/suggest` 3 s, `/tts` 6 s. On timeout, it sends the headset an `error` with `recoverable: true` and still allows instant phrases and typing.
+New fields are optional with an `"en"` default, so they're additive. The gateway owns timeouts: `/suggest` 3 s, `/tts` 6 s. On timeout, it sends the headset an `error` with `recoverable: true` and still allows instant phrases and typing.
 
 ---
 
@@ -250,11 +281,14 @@ Each role lists **scope**, **owned paths**, **done means**, and **notes for your
 - Hand input: pinch-to-select and poke buttons; controllers supported too.
 - Gestures for the instant tier, detected from the 25 hand joints: thumbs-up = `yes`, thumbs-down = `no`, open palm = `wait`. **Avoid palm-pinch**, which the system reserves (it exits the app or opens the Quest menu).
 - Accessibility: large targets, a hold-to-confirm or debounce option, a snap-to-nearest assist, one-handed use, UI at chest/lap height to reduce arm fatigue, icon next to each reply.
+- Hands-free selection (§1): center reticle from the viewer pose, dwell-to-select with a filling ring, input-mode setting (hands / head / both).
 - "Type my own": a large word board or keyboard in XR.
 - Saved-phrases panel: one action to open, tabs per group, big phrase buttons; a "bookmark" button on the last spoken reply; add/edit/delete phrases and groups.
+- UI strings from `apps/shared/locales/`, never inline.
 - *(Stretch)* Saved conversations: a "Save this conversation" action with a label, a list of saved conversations, and a picker to attach them as context.
+- *(Stretch)* Quick memories: a "Remember this" action and a memories panel with delete.
 
-**Done means:** against `mocks/mock-gateway`, a user can enter AR, see 3 replies, select one, fire each instant gesture, speak and bookmark a saved phrase, and compose a typed reply, with no console errors on Quest Browser.
+**Done means:** against `mocks/mock-gateway`, a user can enter AR, see 3 replies, select one by pinch and by head dwell, fire each instant gesture, speak and bookmark a saved phrase, and compose a typed reply, with no console errors on Quest Browser.
 **Agent notes:** test on desktop first with Meta's Immersive Web Emulator (it doesn't emulate passthrough or, likely, hand gestures). Keep gesture thresholds in one config file. Keep draw calls low; profile on the device weekly.
 
 ### Dev 2 — Phone experience + shared client (`apps/phone`, `apps/shared`, `mocks/mock-gateway`)
@@ -263,7 +297,8 @@ Each role lists **scope**, **owned paths**, **done means**, and **notes for your
 - Mic capture via `getUserMedia` + an AudioWorklet that downsamples to PCM16 16 kHz and sends 20 ms binary frames.
 - Plays `audio.play` clips through Web Audio, then sends `audio.done`.
 - Live captions of what the listener said, and the large "I'm answering" ring during `CHOOSING`/`COMPOSING`.
-- `apps/shared`: WebSocket client with reconnect + backoff, typed event parsing from `packages/protocol`, Zustand store shared by both apps.
+- Voice setup: after the consent step, record a ~30-second sample with `MediaRecorder` (audio, or video with audio) or pick an existing file, and upload it to the gateway.
+- `apps/shared`: WebSocket client with reconnect + backoff, typed event parsing from `packages/protocol`, Zustand store shared by both apps, and the locale-keyed UI string files (`locales/en.json`).
 - `mocks/mock-gateway`: a tiny server that replays scripted event sequences (`happy-path`, `slow-tts`, `disconnect`) so Dev 1 never waits on the backend.
 
 **Done means:** against the mock gateway, the phone shows captions, shows the ring, plays a clip after the unlock tap, and reconnects after the server restarts.
@@ -273,10 +308,12 @@ Each role lists **scope**, **owned paths**, **done means**, and **notes for your
 **Scope:** the three models behind the HTTP contract in §6.2.
 - STT: streaming partial/final transcripts with `mlx-whisper`; VAD-based chunking.
 - Suggestions: a prompt for Gemma 4 that returns exactly 3 short replies (aim for ≤ 12 words each) as JSON, conditioned on recent turns and a style profile. Include at least one yes/no-style reply when the last utterance is a yes/no question.
-- TTS: Qwen3-TTS cloning via `mlx-audio`; a voice prompt cache keyed by `voiceId`; a `/voices` endpoint that pre-synthesizes the instant phrases.
+- TTS: Qwen3-TTS cloning via `mlx-audio`; a voice prompt cache keyed by `voiceId`; a `/voices` endpoint that pre-synthesizes the instant phrases, accepts video (audio extracted with ffmpeg), and transcribes the sample itself when no transcript is sent.
+- Pass `locale` through to STT, the prompts, and TTS.
 - Backend interface per model (`SttBackend`, `SuggestBackend`, `TtsBackend`) with MLX implementations, plus CUDA ones for the RTX 3080 server as a stretch.
 - `mocks/mock-models`: same endpoints, canned responses, configurable delays.
-- *(Stretch)* `/summarize` for saved conversations, and use of `context` summaries in the `/suggest` prompt (keep the added prompt short so latency holds).
+- *(Stretch)* `/summarize` for saved conversations and quick memories (keep names, numbers, times, and instructions verbatim), and use of `context` and `memories` in the `/suggest` prompt (keep the added prompt short so latency holds).
+- *(Stretch, after the camera spike)* An endpoint that names the object in a camera frame, and a `target` field on `/suggest`.
 
 **Done means:** `/health` reports all ready on the M4 Pro; a script times STT, `/suggest`, and `/tts` for 20 sample turns and writes results to `docs/latency.md`.
 **Agent notes:** never send audio or text to a remote API unless `ALLOW_REMOTE_FALLBACK=1`. Pin model IDs in config. Log timings for every call. Strip anything that isn't JSON from model output and retry once on a parse failure.
@@ -285,9 +322,12 @@ Each role lists **scope**, **owned paths**, **done means**, and **notes for your
 **Scope:** the hub that ties everything together, plus the contracts and the demo.
 - Go gateway: TLS (mkcert certs in dev), serves the built `apps/*` as static files, the `/ws` hub, `/clips/{id}.wav`, and the state machine in §3.
 - Orchestration: forwards phone audio to `WS /stt`, debounces partials, calls `/suggest`, and speculatively calls `/tts` for the top 3; cancels stale work by `turnId`.
-- SQLite schema and migrations: `person`, `voice_profile`, `consent`, `phrase_clip`, `phrase_group`, `saved_phrase`, `contact`, `session`, `turn` (content only with `store_chat` consent), `audit_log`, `metric`. Stretch: `saved_conversation` (label, session ref, summary).
-- Saved phrases: CRUD over the `phrase.*` events, synthesize a clip via `/tts` on save (and re-synthesize when the voice changes), serve them like instant clips.
+- Clip cache keyed by `(voiceId, locale, text)`: a phrase that comes up again (a repeated suggestion, a saved or instant phrase) is never synthesized twice.
+- SQLite schema and migrations: `person` (with `locale`), `voice_profile` (with `locale`), `consent`, `phrase_clip`, `phrase_group`, `saved_phrase` (with `locale`), `contact`, `session`, `turn` (content only with `store_chat` consent), `audit_log`, `metric`. Stretch: `saved_conversation` (label, session ref, summary), `memory` (summary, created_at).
+- Saved phrases: CRUD over the `phrase.*` events, synthesize a clip via `/tts` on save (and re-synthesize when the voice changes), serve them like instant clips. A new person starts with a "Hospital" group ("I need some water", "I need to use the restroom", "I'm in pain", "Can you call my family?") and a "Demo" group ("Hi judges, I'll be demoing Cadence").
+- Voice upload: accept the phone's sample and forward it to `POST /voices` with the consent ID.
 - *(Stretch)* Saved conversations: persist the session's turns on `conversation.save` (only with `store_chat`), call `/summarize`, pass attached summaries to `/suggest`; deleting a conversation or revoking `store_chat` deletes all of it.
+- *(Stretch)* Quick memories: keep a rolling ~60 s transcript in memory, summarize it on `memory.save` (only with `store_chat`), pass the most recent memories to `/suggest`; revoking `store_chat` deletes them all.
 - Consent flow endpoints and revoke-deletes-everything behavior.
 - `packages/protocol`: schemas, generation scripts (TS + Go), examples, and contract tests.
 - Root `Makefile`: `make dev` (all services with mocks toggles), `make demo`, `make test`.
@@ -348,15 +388,16 @@ Quest testing: same Wi-Fi as the laptop → open the HTTPS URL in Quest Browser 
 | **M0 – Skeleton** | Repo, protocol v1 schemas + examples, mocks running, `make dev` starts everything |
 | **M1 – Spikes** | Voice clone + TTS timing on the M4 Pro; Gemma suggestion quality check; hand pinch working in `immersive-ar` on the Quest |
 | **M2 – Vertical slice** | Real phone mic → STT → suggestions → pinch → clip plays (no speculation yet) |
-| **M3 – Fast path** | Speculative TTS, instant gestures, saved phrases, "I'm answering" ring, consent flow |
+| **M3 – Fast path** | Speculative TTS, instant gestures, saved phrases (with starter groups), hands-free head selection, voice sample recording, "I'm answering" ring, consent flow |
 | **M4 – Demo-ready** | Hotspot rehearsal 3× in a row, backup video recorded, metrics captured |
-| **M5 – Stretch** | Saved conversations: save with label, summarize, attach as context to a later conversation |
+| **M5 – Stretch** | Saved conversations (save with label, summarize, attach as context); quick memories; pointing at objects if the camera spike succeeds |
 
 ---
 
 ## 11. Open questions (resolve and move to `docs/decisions.md`)
 - Final app name.
 - Primary user group for the pitch (stroke/aphasia vs. laryngectomy vs. broad).
-- Whether to anchor reply bubbles to the listener's face (needs passthrough camera access, which may not be available in WebXR) or to a fixed spot.
+- Whether to anchor reply bubbles to the listener's face (needs passthrough camera access, which may not be available in WebXR) or to a fixed spot. The same access decides whether pointing at objects is possible.
+- Hands-free mode: dwell only, or also head gestures (nod = yes, shake = no, tilt toward a bubble) for faster picks.
 - Whether Gemma 4's native audio input can replace Whisper (fewer models in memory).
 - Whether the RTX 3080 home server is used at all, or only as a fallback.
