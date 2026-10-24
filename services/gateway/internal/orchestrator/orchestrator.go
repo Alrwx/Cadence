@@ -5,9 +5,9 @@ package orchestrator
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"log/slog"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	protocol "github.com/Alrwx/Cadence/packages/protocol/go"
@@ -26,37 +26,66 @@ type Orchestrator struct {
 	models *models.Client
 	clips  *clips.Cache
 
+	// Single-user for now: every session belongs to this person and speaks in this voice.
+	// TODO(Dev 4): take both from the session once profiles and the consent flow exist.
+	personID string
+	locale   string
+	voiceID  string
+
 	mu    sync.Mutex
 	state map[string]*sessionState
+
+	flightMu sync.Mutex
+	inflight map[string]*flight // clip-cache key -> synthesis in progress
+	warming  atomic.Bool
 }
 
 type sessionState struct {
 	mu          sync.Mutex
 	machine     *session.Machine
 	turnID      string
+	turnSeq     int
 	suggestions map[string]string // suggestion id -> text, for the current turn
+	history     []models.Turn
+	cancelTurn  context.CancelFunc // cancels the in-flight /suggest for the current turn
+
+	// The speech-to-text stream is managed separately because opening it can block on a dial.
+	sttMu       sync.Mutex
+	stt         *models.STTStream
+	sttFailedAt time.Time
 }
 
-func New(st *store.Store, mc *models.Client, cc *clips.Cache) *Orchestrator {
-	return &Orchestrator{store: st, models: mc, clips: cc, state: map[string]*sessionState{}}
+func New(st *store.Store, mc *models.Client, cc *clips.Cache, personID, locale string) *Orchestrator {
+	return &Orchestrator{
+		store: st, models: mc, clips: cc,
+		personID: personID, locale: locale, voiceID: defaultVoiceID,
+		state: map[string]*sessionState{}, inflight: map[string]*flight{},
+	}
 }
 
 func (o *Orchestrator) OnConnect(s *hub.Session, role hub.Role) {
 	ss := o.session(s.ID)
 	ss.mu.Lock()
-	state := ss.machine.State()
+	state, turnID := ss.machine.State(), ss.turnID
 	ss.mu.Unlock()
 	ctx := context.Background()
-	_ = s.Send(ctx, role, protocol.TypeState, ss.turnID, protocol.StateData{State: string(state)})
+	_ = s.Send(ctx, role, protocol.TypeState, turnID, protocol.StateData{State: string(state)})
 	if role == hub.Headset {
-		// TODO(Dev 4): load phrase_group + saved_phrase rows for the session's person.
-		_ = s.Send(ctx, role, protocol.TypePhrases, "", protocol.PhrasesData{Groups: []protocol.PhrasesGroup{}})
+		o.sendPhrases(ctx, s)
+		go o.warmClips(s)
 	}
 }
 
+// OnAudio forwards phone mic frames to the model service's STT stream; transcripts come back through readSTT.
 func (o *Orchestrator) OnAudio(s *hub.Session, frame []byte) {
-	// TODO(Dev 4): forward frames to the model service's WS /stt, broadcast transcript.partial/final,
-	// debounce partials (~400 ms) and speculatively call /suggest and /tts for the top 3.
+	ss := o.session(s.ID)
+	stream := o.sttStream(s, ss)
+	if stream == nil {
+		return
+	}
+	if err := stream.Send(frame); err != nil {
+		o.endSTT(s, ss, stream)
+	}
 }
 
 func (o *Orchestrator) OnEvent(s *hub.Session, from hub.Role, env protocol.Envelope) {
@@ -74,6 +103,7 @@ func (o *Orchestrator) OnEvent(s *hub.Session, from hub.Role, env protocol.Envel
 
 	switch d := data.(type) {
 	case *protocol.PhoneUnlockData:
+		o.resetSTTBackoff(ss) // the user tapped Start: retry the model service right away
 		o.apply(ctx, s, ss, session.Start)
 	case *protocol.ComposeStartData:
 		o.apply(ctx, s, ss, session.ComposeStart)
@@ -82,7 +112,7 @@ func (o *Orchestrator) OnEvent(s *hub.Session, from hub.Role, env protocol.Envel
 	case *protocol.AudioDoneData:
 		o.apply(ctx, s, ss, session.ClipDone)
 	case *protocol.ComposeSubmitData:
-		o.speak(ctx, s, ss, d.Text, "typed")
+		o.speak(ctx, s, ss, d.Text, "typed", o.locale)
 	case *protocol.SelectData:
 		ss.mu.Lock()
 		text, ok := ss.suggestions[d.SuggestionID]
@@ -91,16 +121,13 @@ func (o *Orchestrator) OnEvent(s *hub.Session, from hub.Role, env protocol.Envel
 			o.sendError(ctx, s, "stale_suggestion", "That suggestion is no longer available.")
 			return
 		}
-		o.speak(ctx, s, ss, text, "suggestion")
+		o.speak(ctx, s, ss, text, "suggestion", o.locale)
 	case *protocol.InstantData:
-		// TODO(Dev 4): play the clip pre-synthesized at voice-creation time instead of synthesizing now.
-		o.speak(ctx, s, ss, instantText[d.PhraseID], "instant")
-	case *protocol.PhraseSpeakData:
-		// TODO(Dev 4): look up the saved phrase and play its pre-synthesized clip.
-		o.sendError(ctx, s, "not_implemented", "Saved phrases aren't wired up yet.")
-	case *protocol.PhraseSaveData, *protocol.PhraseDeleteData, *protocol.PhraseGroupSaveData, *protocol.PhraseGroupDeleteData:
-		// TODO(Dev 4): CRUD in store, synthesize on save, then resend the phrases event.
-		o.sendError(ctx, s, "not_implemented", "Editing saved phrases isn't wired up yet.")
+		// Pre-synthesized by warmClips; synthesized now only if warm-up hasn't reached it yet.
+		o.speak(ctx, s, ss, instantText[d.PhraseID], "instant", o.locale)
+	case *protocol.PhraseSpeakData, *protocol.PhraseSaveData, *protocol.PhraseDeleteData,
+		*protocol.PhraseGroupSaveData, *protocol.PhraseGroupDeleteData:
+		o.onPhraseEvent(ctx, s, ss, d)
 	default:
 		slog.Info("event not handled yet", "session", s.ID, "type", env.Type)
 	}
@@ -110,8 +137,8 @@ var instantText = map[string]string{
 	"yes": "Yes", "no": "No", "wait": "Give me a second", "hello": "Hello", "laugh": "Ha ha",
 }
 
-// speak synthesizes text, caches the clip, logs it, and tells the phone to play it.
-func (o *Orchestrator) speak(ctx context.Context, s *hub.Session, ss *sessionState, text, source string) {
+// speak gets a clip for text (from the cache, or synthesized now), logs it, and tells the phone to play it.
+func (o *Orchestrator) speak(ctx context.Context, s *hub.Session, ss *sessionState, text, source, locale string) {
 	if text == "" {
 		o.sendError(ctx, s, "unknown_phrase", "Nothing to say for that selection.")
 		return
@@ -119,11 +146,7 @@ func (o *Orchestrator) speak(ctx context.Context, s *hub.Session, ss *sessionSta
 	if !o.apply(ctx, s, ss, session.Speak) {
 		return
 	}
-	clipID := fmt.Sprintf("c_%d", time.Now().UnixNano())
-	wav, err := o.models.TTS(ctx, defaultVoiceID, text)
-	if err == nil {
-		err = o.clips.Put(clipID, wav)
-	}
+	clipID, err := o.clipFor(ctx, text, locale)
 	if err != nil {
 		slog.Error("tts", "session", s.ID, "err", err)
 		o.sendError(ctx, s, "tts_failed", "Couldn't make that audio. Instant phrases and typing still work.")
@@ -133,7 +156,11 @@ func (o *Orchestrator) speak(ctx context.Context, s *hub.Session, ss *sessionSta
 	if err := o.store.LogUtterance(s.ID, clipID, text, source, time.Now().UnixMilli()); err != nil {
 		slog.Error("audit log", "session", s.ID, "err", err)
 	}
-	_ = s.Send(ctx, hub.Phone, protocol.TypeAudioPlay, ss.turnID, protocol.AudioPlayData{
+	ss.mu.Lock()
+	ss.addTurnLocked("user", text)
+	turnID := ss.turnID
+	ss.mu.Unlock()
+	_ = s.Send(ctx, hub.Phone, protocol.TypeAudioPlay, turnID, protocol.AudioPlayData{
 		ClipID: clipID, URL: "/clips/" + clipID + ".wav", Text: text, Source: source,
 	})
 }
@@ -143,6 +170,9 @@ func (o *Orchestrator) apply(ctx context.Context, s *hub.Session, ss *sessionSta
 	ss.mu.Lock()
 	next, err := ss.machine.Apply(in)
 	turnID := ss.turnID
+	if err == nil && (in == session.Speak || in == session.ComposeStart || in == session.Cancel) {
+		ss.endTurnLocked()
+	}
 	ss.mu.Unlock()
 	if err != nil {
 		slog.Info("ignored input", "session", s.ID, "err", err)

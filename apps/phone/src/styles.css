@@ -34,13 +34,32 @@ body,
   margin: 0;
 }
 
-.start button {
-  font-size: 2rem;
-  padding: 1.5rem 4rem;
-  border-radius: 1.5rem;
+button {
+  font: inherit;
+  font-size: 1.15rem;
+  padding: 0.9rem 1.4rem;
+  min-height: 3rem;
+  border-radius: 0.9rem;
+  border: 1px solid #3a4550;
+  background: #1c232b;
+  color: var(--fg);
+}
+
+button:disabled {
+  opacity: 0.45;
+}
+
+button.primary,
+.start button.big {
   border: 0;
   background: var(--accent);
   color: white;
+}
+
+.start button.big {
+  font-size: 2rem;
+  padding: 1.5rem 4rem;
+  border-radius: 1.5rem;
 }
 
 .main {
@@ -97,4 +116,88 @@ body,
 .speaking {
   font-size: 1.8rem;
   font-weight: 600;
+}
+
+.voice {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  padding: 1.5rem 1rem 2.5rem;
+  max-width: 34rem;
+  margin: 0 auto;
+  font-size: 1.1rem;
+  line-height: 1.45;
+}
+
+.voice h1 {
+  font-size: 1.6rem;
+  margin: 0;
+}
+
+.voice p {
+  margin: 0;
+}
+
+.voice .field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.voice input:not([type]) {
+  font: inherit;
+  padding: 0.75rem;
+  border-radius: 0.6rem;
+  border: 1px solid #3a4550;
+  background: #0b0f12;
+  color: var(--fg);
+}
+
+.voice .check {
+  display: flex;
+  gap: 0.75rem;
+  align-items: flex-start;
+}
+
+.voice .check input {
+  width: 1.5rem;
+  height: 1.5rem;
+  flex: none;
+  margin-top: 0.1rem;
+}
+
+.voice .reading {
+  border-left: 4px solid var(--accent);
+  padding-left: 0.9rem;
+}
+
+.voice .row {
+  display: flex;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.voice .row button {
+  flex: 1;
+}
+
+.voice audio {
+  width: 100%;
+}
+
+.muted {
+  color: var(--muted);
+}
+
+.error {
+  color: #f0a35e;
+}
+
+.ok {
+  color: #7fd49a;
+  font-size: 1.3rem;
+}
+
+.recording {
+  background: #c94a4a !important;
 }
