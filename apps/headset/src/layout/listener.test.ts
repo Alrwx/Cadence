@@ -11,14 +11,14 @@ const head = (pitchDeg: number, yawDeg: number, rollDeg = 0) => ({
 });
 const gaze = (h: ReturnType<typeof head>) => new Vector3(0, 0, -1).applyQuaternion(h.quaternion);
 
-test("the bubbles sit at the set distance, to the right of where the head looked", () => {
-  const h = head(10, 40);
-  const spot = listenerSpot(h);
-  const toSpot = spot.position.clone().sub(h.position);
-  assert.ok(Math.abs(toSpot.length() - layout.listenerDistance) < 1e-6);
-  assert.ok(Math.abs(toSpot.angleTo(gaze(h)) / DEG - layout.listenerSideDeg) < 0.5);
-  const right = new Vector3(1, 0, 0).applyQuaternion(h.quaternion);
-  assert.ok(toSpot.dot(right) > 0);
+test("the bubbles sit at the set distance, to the right of where the head looked, however far it is pitched", () => {
+  for (const pitch of [10, 60, -40]) {
+    const h = head(pitch, 40);
+    const toSpot = listenerSpot(h).position.sub(h.position);
+    assert.ok(Math.abs(toSpot.length() - layout.listenerDistance) < 1e-6);
+    assert.ok(Math.abs(toSpot.angleTo(gaze(h)) / DEG - layout.listenerSideDeg) < 1e-6, `pitch ${pitch}`);
+    assert.ok(toSpot.dot(new Vector3(1, 0, 0).applyQuaternion(h.quaternion)) > 0);
+  }
 });
 
 test("the bubbles face the head", () => {

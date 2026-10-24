@@ -102,13 +102,14 @@ function MemoriesRow({ y }: { y: number }) {
 /** Where the reply bubbles float; placing stays on this view, so the head can turn to the listener freely. */
 function ListenerRow({ y }: { y: number }) {
   const placed = useListener((s) => s.spot !== null);
+  const placing = useListener((s) => s.at !== null);
   return (
     <>
       <Text position={[LABEL_X, y, 0]} fontSize={layout.fontSize} anchorX="left" color="white">
         {t("listener.setting")}
       </Text>
       <Button3D label={t("listener.placeShort")} width={0.12} color={placed ? ACTIVE : IDLE} position={[-0.14, y, 0]} onPress={requestPlaceListener} />
-      <Button3D label={t("listener.clear")} width={0.16} color={IDLE} disabled={!placed} position={[0.01, y, 0]} onPress={clearListener} />
+      <Button3D label={t("listener.clear")} width={0.16} color={IDLE} disabled={!placed && !placing} position={[0.01, y, 0]} onPress={clearListener} />
     </>
   );
 }

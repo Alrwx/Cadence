@@ -114,7 +114,7 @@ function StatusLine() {
   else if (state === "SUGGESTING") text = t("status.suggesting");
   else text = t("status.listening");
 
-  const color = !recentering && notice?.tone === "error" ? "#ffb4a8" : "#ddd";
+  const color = !recentering && !placing && notice?.tone === "error" ? "#ffb4a8" : "#ddd";
   return (
     <Text position={[0, 0.2, 0]} fontSize={0.02} maxWidth={0.9} color={color} anchorY="bottom" textAlign="center">
       {text}
