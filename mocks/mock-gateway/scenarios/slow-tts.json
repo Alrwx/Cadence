@@ -1,0 +1,29 @@
+{
+  "description": "Suggestions arrive but audio is slow; selecting a reply waits ~4 s, and one suggestion times out.",
+  "ttsDelayMs": 4000,
+  "steps": [
+    { "afterMs": 1000, "to": "all", "type": "state", "data": { "state": "LISTENING" } },
+    { "afterMs": 1200, "to": "all", "type": "transcript.final", "data": { "text": "Do you want some water?", "speaker": "other" } },
+    { "afterMs": 0, "to": "all", "type": "state", "data": { "state": "SUGGESTING" } },
+    {
+      "afterMs": 1500,
+      "to": "headset",
+      "type": "suggestions",
+      "data": {
+        "items": [
+          { "id": "sg_1", "text": "Yes, please.", "kind": "yes_no", "audioReady": false },
+          { "id": "sg_2", "text": "Not right now.", "kind": "yes_no", "audioReady": false },
+          { "id": "sg_3", "text": "Can I have juice instead?", "kind": "question", "audioReady": false }
+        ]
+      }
+    },
+    { "afterMs": 0, "to": "all", "type": "state", "data": { "state": "CHOOSING" } },
+    { "afterMs": 3500, "to": "headset", "type": "suggestion.audioReady", "data": { "id": "sg_1" } },
+    {
+      "afterMs": 2500,
+      "to": "headset",
+      "type": "error",
+      "data": { "code": "tts_timeout", "message": "Audio is slow right now. Instant phrases and typing still work.", "recoverable": true }
+    }
+  ]
+}

@@ -1,0 +1,8 @@
+{
+  "type": "cancel",
+  "v": 1,
+  "sessionId": "s_123",
+  "turnId": "t_7",
+  "ts": 1729740002750,
+  "data": {}
+}

@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "select",
+  "description": "User picked a suggested reply.",
+  "x-direction": "headset → gateway",
+  "type": "object",
+  "properties": {
+    "suggestionId": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "suggestionId"
+  ],
+  "additionalProperties": false
+}

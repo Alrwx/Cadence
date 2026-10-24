@@ -1,0 +1,28 @@
+{
+  "type": "phrases",
+  "v": 1,
+  "sessionId": "s_123",
+  "turnId": "t_7",
+  "ts": 1729740003000,
+  "data": {
+    "groups": [
+      {
+        "id": "pg_hospital",
+        "name": "Hospital",
+        "items": [
+          {
+            "id": "ph_water",
+            "text": "I need some water",
+            "icon": "water",
+            "audioReady": true
+          },
+          {
+            "id": "ph_restroom",
+            "text": "I need to use the restroom",
+            "audioReady": true
+          }
+        ]
+      }
+    ]
+  }
+}

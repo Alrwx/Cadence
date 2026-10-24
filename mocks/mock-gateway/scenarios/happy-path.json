@@ -1,0 +1,27 @@
+{
+  "description": "The listener asks a question; three suggestions arrive with audio ready shortly after.",
+  "ttsDelayMs": 300,
+  "steps": [
+    { "afterMs": 1000, "to": "all", "type": "state", "data": { "state": "LISTENING" } },
+    { "afterMs": 600, "to": "all", "type": "transcript.partial", "data": { "text": "How are", "speaker": "other" } },
+    { "afterMs": 500, "to": "all", "type": "transcript.partial", "data": { "text": "How are you feeling", "speaker": "other" } },
+    { "afterMs": 500, "to": "all", "type": "transcript.final", "data": { "text": "How are you feeling today?", "speaker": "other" } },
+    { "afterMs": 0, "to": "all", "type": "state", "data": { "state": "SUGGESTING" } },
+    {
+      "afterMs": 700,
+      "to": "headset",
+      "type": "suggestions",
+      "data": {
+        "items": [
+          { "id": "sg_1", "text": "Better than yesterday, thanks.", "kind": "statement", "icon": "smile", "audioReady": false },
+          { "id": "sg_2", "text": "A little tired.", "kind": "statement", "audioReady": false },
+          { "id": "sg_3", "text": "Is the doctor coming today?", "kind": "question", "audioReady": false }
+        ]
+      }
+    },
+    { "afterMs": 0, "to": "all", "type": "state", "data": { "state": "CHOOSING" } },
+    { "afterMs": 400, "to": "headset", "type": "suggestion.audioReady", "data": { "id": "sg_1" } },
+    { "afterMs": 200, "to": "headset", "type": "suggestion.audioReady", "data": { "id": "sg_2" } },
+    { "afterMs": 200, "to": "headset", "type": "suggestion.audioReady", "data": { "id": "sg_3" } }
+  ]
+}

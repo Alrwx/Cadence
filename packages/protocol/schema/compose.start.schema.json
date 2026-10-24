@@ -1,0 +1,10 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "compose.start",
+  "description": "User opened \"Type my own\".",
+  "x-direction": "headset → gateway",
+  "type": "object",
+  "properties": {},
+  "required": [],
+  "additionalProperties": false
+}

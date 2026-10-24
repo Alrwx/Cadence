@@ -1,0 +1,10 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "phone.unlock",
+  "description": "User tapped Start on the phone; audio playback is allowed.",
+  "x-direction": "phone → gateway",
+  "type": "object",
+  "properties": {},
+  "required": [],
+  "additionalProperties": false
+}

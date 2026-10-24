@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "error",
+  "description": "Something failed.",
+  "x-direction": "gateway → client",
+  "type": "object",
+  "properties": {
+    "code": {
+      "type": "string"
+    },
+    "message": {
+      "type": "string"
+    },
+    "recoverable": {
+      "type": "boolean"
+    }
+  },
+  "required": [
+    "code",
+    "message",
+    "recoverable"
+  ],
+  "additionalProperties": false
+}

@@ -1,0 +1,10 @@
+{
+  "type": "suggestion.audioReady",
+  "v": 1,
+  "sessionId": "s_123",
+  "turnId": "t_7",
+  "ts": 1729740001500,
+  "data": {
+    "id": "sg_2"
+  }
+}

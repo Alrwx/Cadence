@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "hello",
+  "description": "Client introduces itself after connecting.",
+  "x-direction": "client → gateway",
+  "type": "object",
+  "properties": {
+    "role": {
+      "type": "string",
+      "enum": [
+        "headset",
+        "phone"
+      ]
+    },
+    "clientVersion": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "role",
+    "clientVersion"
+  ],
+  "additionalProperties": false
+}

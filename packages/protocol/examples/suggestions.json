@@ -1,0 +1,30 @@
+{
+  "type": "suggestions",
+  "v": 1,
+  "sessionId": "s_123",
+  "turnId": "t_7",
+  "ts": 1729740001250,
+  "data": {
+    "items": [
+      {
+        "id": "sg_1",
+        "text": "Better than yesterday, thanks.",
+        "kind": "statement",
+        "icon": "smile",
+        "audioReady": true
+      },
+      {
+        "id": "sg_2",
+        "text": "A little tired.",
+        "kind": "statement",
+        "audioReady": false
+      },
+      {
+        "id": "sg_3",
+        "text": "Is the doctor coming today?",
+        "kind": "question",
+        "audioReady": false
+      }
+    ]
+  }
+}

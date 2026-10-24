@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "state",
+  "description": "Session state changed.",
+  "x-direction": "gateway → all",
+  "type": "object",
+  "properties": {
+    "state": {
+      "type": "string",
+      "enum": [
+        "IDLE",
+        "LISTENING",
+        "SUGGESTING",
+        "CHOOSING",
+        "COMPOSING",
+        "SPEAKING"
+      ]
+    }
+  },
+  "required": [
+    "state"
+  ],
+  "additionalProperties": false
+}

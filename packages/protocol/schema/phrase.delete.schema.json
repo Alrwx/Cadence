@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "phrase.delete",
+  "description": "Delete a saved phrase.",
+  "x-direction": "headset → gateway",
+  "type": "object",
+  "properties": {
+    "phraseId": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "phraseId"
+  ],
+  "additionalProperties": false
+}

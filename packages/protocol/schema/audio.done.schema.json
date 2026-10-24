@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "audio.done",
+  "description": "Phone finished playing a clip.",
+  "x-direction": "phone → gateway",
+  "type": "object",
+  "properties": {
+    "clipId": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "clipId"
+  ],
+  "additionalProperties": false
+}

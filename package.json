@@ -1,0 +1,21 @@
+{
+  "name": "cadence",
+  "private": true,
+  "packageManager": "pnpm@9.15.9",
+  "engines": {
+    "node": ">=22.12"
+  },
+  "scripts": {
+    "protocol:gen": "pnpm --filter @cadence/protocol gen",
+    "dev:headset": "pnpm --filter @cadence/headset dev",
+    "dev:phone": "pnpm --filter @cadence/phone dev",
+    "dev:mock-gateway": "pnpm --filter @cadence/mock-gateway dev",
+    "typecheck": "pnpm -r typecheck",
+    "test": "pnpm -r test",
+    "format": "prettier --write ."
+  },
+  "devDependencies": {
+    "prettier": "^3.9.10",
+    "typescript": "^5.9.3"
+  }
+}

@@ -1,0 +1,20 @@
+{
+  "name": "@cadence/protocol",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./ts/index.ts"
+  },
+  "scripts": {
+    "gen": "node scripts/generate.mjs && gofmt -w go/events.go",
+    "typecheck": "tsc --noEmit",
+    "test": "tsx --test \"tests/*.test.ts\""
+  },
+  "devDependencies": {
+    "@types/node": "^22.20.5",
+    "ajv": "^8.20.0",
+    "tsx": "^4.23.15",
+    "typescript": "^5.9.3"
+  }
+}

@@ -1,0 +1,17 @@
+{
+  "type": "conversations",
+  "v": 1,
+  "sessionId": "s_123",
+  "turnId": "t_7",
+  "ts": 1729740005750,
+  "data": {
+    "items": [
+      {
+        "id": "cv_1",
+        "label": "Dr. Lee – Oct 24",
+        "startedAt": 1729740000000,
+        "summary": "Started a new blood-pressure medication; follow up in two weeks."
+      }
+    ]
+  }
+}

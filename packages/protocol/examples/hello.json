@@ -1,0 +1,10 @@
+{
+  "type": "hello",
+  "v": 1,
+  "sessionId": "s_123",
+  "ts": 1729740000250,
+  "data": {
+    "role": "headset",
+    "clientVersion": "0.1.0"
+  }
+}

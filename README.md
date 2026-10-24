@@ -34,33 +34,44 @@ Quest 3S (browser, WebXR)  ◄── WSS ──►  Go gateway  ◄── WSS �
 - The **gateway** is the only process on the network. It serves both web apps, runs the session state machine, and stores consent, profiles, saved phrases, and the audit log in SQLite.
 - The **model service** binds to localhost only. To keep latency low, the gateway asks for suggestions and synthesizes their audio while the other person is still talking, so a selected reply is usually ready to play immediately.
 
-## Layout (planned)
+## Layout
 
 | Path | What lives there |
 |---|---|
-| `apps/headset/` | Quest 3S XR app: reply bubbles, hand input, gestures, saved-phrases panel |
-| `apps/phone/` | Listener-facing phone page: mic capture, captions, audio playback |
-| `apps/shared/` | Shared TS client: WebSocket connection, reconnect, store |
-| `services/gateway/` | Go gateway: TLS, WebSocket hub, state machine, SQLite, `/clips` |
-| `services/models/` | Python FastAPI model service: STT, suggestions, TTS |
-| `packages/protocol/` | Event schemas and generated TS + Go types |
-| `mocks/` | Mock gateway and mock model service for working without the backend |
+| `apps/headset/` | Quest 3S WebXR app (React Three Fiber): reply bubbles, hand gestures, saved-phrases panel, word board |
+| `apps/phone/` | Listener-facing phone page: Start/unlock, mic → PCM16 16 kHz, captions, "I'm answering" ring, clip playback |
+| `apps/shared/` | Shared TS client: WebSocket connection with reconnect, Zustand store, Vite dev-server config |
+| `services/gateway/` | Go gateway: TLS, `/ws` hub, session state machine, orchestration, SQLite, `/clips` |
+| `services/models/` | Python FastAPI model service: STT, suggestions, TTS behind swappable backends |
+| `packages/protocol/` | Event JSON Schemas, one example per event, generated TS + Go types, contract tests |
+| `mocks/mock-gateway/` | Scripted gateway (`happy-path`, `slow-tts`, `disconnect`) for frontend work |
+| `mocks/mock-models/` | Same endpoints as the model service with canned responses and delays |
 | `docs/` | Decisions, measured latency, demo script |
-
-The repo still contains the scaffold from the earlier glasses-based idea (`apps/ios/`, `apps/server/`, `supabase/`, `deploy/`); it will be replaced by the layout above.
 
 ## Running locally
 
+Needs Node 22+ (with `corepack enable` for pnpm), Go 1.26+, [uv](https://docs.astral.sh/uv/), and [mkcert](https://github.com/FiloSottile/mkcert).
+
+```sh
+cp .env.example .env
+make setup        # install JS, Python, and Go dependencies
+make certs        # local HTTPS cert for this laptop's LAN IP
+make dev-mock     # headset + phone against the scripted mock gateway (no backend needed)
+make dev          # model service (mock when USE_MOCK_MODELS=1) + gateway + headset + phone
+make test         # contract, gateway, model-service, and client tests
+```
+
 | Service | Address |
 |---|---|
-| Gateway (HTTPS + WSS) | `https://<laptop-ip>:8443` |
+| Gateway (HTTPS + WSS, serves built apps at `/headset/` and `/phone/`) | `https://<laptop-ip>:8443` |
 | Model service | `http://127.0.0.1:8000` (never exposed) |
-| Headset dev server | `https://<laptop-ip>:5173` |
-| Phone dev server | `https://<laptop-ip>:5174` |
+| Headset dev server | `https://<laptop-ip>:5173/headset/` |
+| Phone dev server | `https://<laptop-ip>:5174/phone/` |
+| Mock gateway | `https://<laptop-ip>:8444` |
 
-Copy `.env.example` to `.env`, then `make dev` starts everything (with mock toggles). TLS in development uses a `mkcert` local CA, so the Quest and phone each show a one-time certificate warning to accept.
+The dev servers proxy `/ws` and `/clips` to the gateway, so add `?session=<id>` to both URLs to pair a headset with a phone (default `demo`). After editing `packages/protocol/schema/`, run `make protocol` to regenerate the TS and Go types.
 
-**On the Quest:** join the same Wi-Fi as the laptop, open the HTTPS URL in Quest Browser, accept the certificate, and tap "Enter". Over USB: `adb reverse tcp:5173 tcp:5173` and open `https://localhost:5173`.
+**On the Quest:** join the same Wi-Fi as the laptop, open the HTTPS URL in Quest Browser, accept the certificate, and tap "Enter". Over USB: `adb reverse tcp:5173 tcp:5173` and open `https://localhost:5173/headset/`. On a desktop, Meta's Immersive Web Emulator works for layout (not passthrough or hand gestures).
 
 **Demo hardware:** MacBook Pro M4 Pro (24 GB), Quest 3S, a phone, and our own hotspot (don't rely on venue Wi-Fi).
 

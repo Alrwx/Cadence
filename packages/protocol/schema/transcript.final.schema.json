@@ -1,0 +1,23 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "transcript.final",
+  "description": "Final transcript for a finished utterance.",
+  "x-direction": "gateway → all",
+  "type": "object",
+  "properties": {
+    "text": {
+      "type": "string"
+    },
+    "speaker": {
+      "type": "string",
+      "enum": [
+        "other"
+      ]
+    }
+  },
+  "required": [
+    "text",
+    "speaker"
+  ],
+  "additionalProperties": false
+}

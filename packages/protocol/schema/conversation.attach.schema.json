@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "conversation.attach",
+  "description": "(Stretch) Use saved conversations as context for this session.",
+  "x-direction": "headset → gateway",
+  "type": "object",
+  "properties": {
+    "conversationIds": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  },
+  "required": [
+    "conversationIds"
+  ],
+  "additionalProperties": false
+}

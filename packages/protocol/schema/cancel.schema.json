@@ -1,0 +1,10 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "cancel",
+  "description": "User backed out of choosing or composing.",
+  "x-direction": "headset → gateway",
+  "type": "object",
+  "properties": {},
+  "required": [],
+  "additionalProperties": false
+}

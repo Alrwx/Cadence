@@ -1,0 +1,36 @@
+[project]
+name = "cadence-models"
+version = "0.1.0"
+description = "Local STT, reply suggestions, and voice-cloned TTS behind the contract in AGENTS(GH).md §6.2"
+requires-python = ">=3.12"
+dependencies = [
+    "fastapi>=0.162.0",
+    "python-multipart>=0.0.32",
+    "uvicorn[standard]>=0.54.0",
+]
+
+[project.optional-dependencies]
+# Apple Silicon backends for the demo MacBook. Verify each in the M1 spikes (§4 unverified assumptions).
+mlx = [
+    "mlx-whisper; sys_platform == 'darwin'",
+    "mlx-lm; sys_platform == 'darwin'",
+    "mlx-audio; sys_platform == 'darwin'",
+]
+
+[dependency-groups]
+dev = [
+    "httpx2>=2.16.0",
+    "pytest>=9.1.1",
+    "ruff>=0.14.0",
+]
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+markers = ["slow: loads real models; run with -m slow"]
+addopts = "-m 'not slow'"
+
+[tool.ruff]
+line-length = 120
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]

@@ -1,0 +1,10 @@
+{
+  "type": "instant",
+  "v": 1,
+  "sessionId": "s_123",
+  "turnId": "t_7",
+  "ts": 1729740002000,
+  "data": {
+    "phraseId": "yes"
+  }
+}

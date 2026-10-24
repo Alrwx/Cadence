@@ -1,0 +1,11 @@
+{
+  "type": "transcript.partial",
+  "v": 1,
+  "sessionId": "s_123",
+  "turnId": "t_7",
+  "ts": 1729740000750,
+  "data": {
+    "text": "How are you feel",
+    "speaker": "other"
+  }
+}

@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "conversation.delete",
+  "description": "(Stretch) Delete a saved conversation and everything derived from it.",
+  "x-direction": "headset → gateway",
+  "type": "object",
+  "properties": {
+    "conversationId": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "conversationId"
+  ],
+  "additionalProperties": false
+}
