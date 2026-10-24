@@ -8,6 +8,7 @@ import {
   isEventType,
   PROTOCOL_VERSION,
   type CadenceEvent,
+  type ConversationsItem,
   type EventDataMap,
   type EventType,
   type PhrasesGroup,
@@ -45,6 +46,7 @@ interface Session {
   turnId: string;
   clipTexts: Map<string, string>;
   groups: PhrasesGroup[];
+  conversations: ConversationsItem[];
   timers: NodeJS.Timeout[];
 }
 
@@ -70,6 +72,14 @@ function getSession(id: string): Session {
           ],
         },
         { id: "pg_home", name: "Home", items: [{ id: "ph_love", text: "I love you", audioReady: true }] },
+      ],
+      conversations: [
+        {
+          id: "cv_lee",
+          label: "Dr. Lee – last visit",
+          startedAt: Date.now() - 7 * 24 * 3600_000,
+          summary: "Started lisinopril for blood pressure; check back in a week about dizziness.",
+        },
       ],
       timers: [],
     };
@@ -143,6 +153,22 @@ function handle(s: Session, event: CadenceEvent): void {
       for (const g of s.groups) g.items = g.items.filter((p) => p.id !== event.data.phraseId);
       send(s, "headset", "phrases", { groups: s.groups });
       break;
+    case "conversation.save":
+      s.conversations.push({
+        id: `cv_${Date.now()}`,
+        label: event.data.label,
+        startedAt: Date.now(),
+        summary: "(mock summary of this conversation)",
+      });
+      send(s, "headset", "conversations", { items: s.conversations });
+      break;
+    case "conversation.delete":
+      s.conversations = s.conversations.filter((c) => c.id !== event.data.conversationId);
+      send(s, "headset", "conversations", { items: s.conversations });
+      break;
+    case "conversation.attach":
+      console.log("mock: attached conversations", event.data.conversationIds);
+      break;
     case "compose.start":
       send(s, "all", "state", { state: "COMPOSING" });
       break;
@@ -188,7 +214,10 @@ wss.on("connection", (ws, req) => {
   s.clients[role] = ws;
   console.log(`connected ${role} (session ${sessionId})`);
   send(s, role, "state", { state: "IDLE" });
-  if (role === "headset") send(s, "headset", "phrases", { groups: s.groups });
+  if (role === "headset") {
+    send(s, "headset", "phrases", { groups: s.groups });
+    send(s, "headset", "conversations", { items: s.conversations });
+  }
 
   ws.on("message", (raw, isBinary) => {
     if (isBinary) return; // phone mic frames; the mock ignores audio
