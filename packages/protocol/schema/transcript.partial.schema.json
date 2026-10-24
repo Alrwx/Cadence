@@ -1,0 +1,23 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "transcript.partial",
+  "description": "Live, in-progress transcript of the other speaker.",
+  "x-direction": "gateway → all",
+  "type": "object",
+  "properties": {
+    "text": {
+      "type": "string"
+    },
+    "speaker": {
+      "type": "string",
+      "enum": [
+        "other"
+      ]
+    }
+  },
+  "required": [
+    "text",
+    "speaker"
+  ],
+  "additionalProperties": false
+}

@@ -1,0 +1,35 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Envelope",
+  "description": "Wrapper around every JSON event. `data` is validated by the schema named after `type`.",
+  "type": "object",
+  "properties": {
+    "type": {
+      "type": "string"
+    },
+    "v": {
+      "type": "integer",
+      "const": 1
+    },
+    "sessionId": {
+      "type": "string"
+    },
+    "turnId": {
+      "type": "string"
+    },
+    "ts": {
+      "type": "integer"
+    },
+    "data": {
+      "type": "object"
+    }
+  },
+  "required": [
+    "type",
+    "v",
+    "sessionId",
+    "ts",
+    "data"
+  ],
+  "additionalProperties": false
+}

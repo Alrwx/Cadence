@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "phrase.group.save",
+  "description": "Create (no groupId) or rename a phrase group.",
+  "x-direction": "headset → gateway",
+  "type": "object",
+  "properties": {
+    "groupId": {
+      "type": "string"
+    },
+    "name": {
+      "type": "string"
+    },
+    "order": {
+      "type": "integer"
+    }
+  },
+  "required": [
+    "name"
+  ],
+  "additionalProperties": false
+}

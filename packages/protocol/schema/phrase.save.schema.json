@@ -1,0 +1,23 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "phrase.save",
+  "description": "Save a phrase; fromClipId bookmarks a reply that was just spoken.",
+  "x-direction": "headset → gateway",
+  "type": "object",
+  "properties": {
+    "text": {
+      "type": "string"
+    },
+    "groupId": {
+      "type": "string"
+    },
+    "fromClipId": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "text",
+    "groupId"
+  ],
+  "additionalProperties": false
+}

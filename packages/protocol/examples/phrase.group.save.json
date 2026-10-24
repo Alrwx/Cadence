@@ -1,0 +1,11 @@
+{
+  "type": "phrase.group.save",
+  "v": 1,
+  "sessionId": "s_123",
+  "turnId": "t_7",
+  "ts": 1729740004000,
+  "data": {
+    "name": "Doctor",
+    "order": 2
+  }
+}

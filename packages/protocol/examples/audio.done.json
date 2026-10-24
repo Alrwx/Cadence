@@ -1,0 +1,10 @@
+{
+  "type": "audio.done",
+  "v": 1,
+  "sessionId": "s_123",
+  "turnId": "t_7",
+  "ts": 1729740004750,
+  "data": {
+    "clipId": "c_42"
+  }
+}

@@ -1,0 +1,9 @@
+{
+  "description": "Starts like the happy path, then the server drops every connection to exercise reconnect.",
+  "ttsDelayMs": 300,
+  "disconnectAfterMs": 4000,
+  "steps": [
+    { "afterMs": 1000, "to": "all", "type": "state", "data": { "state": "LISTENING" } },
+    { "afterMs": 1000, "to": "all", "type": "transcript.final", "data": { "text": "Are you comfortable?", "speaker": "other" } }
+  ]
+}

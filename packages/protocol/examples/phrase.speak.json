@@ -1,0 +1,10 @@
+{
+  "type": "phrase.speak",
+  "v": 1,
+  "sessionId": "s_123",
+  "turnId": "t_7",
+  "ts": 1729740003250,
+  "data": {
+    "phraseId": "ph_water"
+  }
+}

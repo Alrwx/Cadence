@@ -1,0 +1,12 @@
+{
+  "type": "error",
+  "v": 1,
+  "sessionId": "s_123",
+  "turnId": "t_7",
+  "ts": 1729740005250,
+  "data": {
+    "code": "suggest_timeout",
+    "message": "Suggestions took too long. Instant phrases and typing still work.",
+    "recoverable": true
+  }
+}

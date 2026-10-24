@@ -1,0 +1,48 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "suggestions",
+  "description": "Three suggested replies for the current turn.",
+  "x-direction": "gateway → headset",
+  "type": "object",
+  "properties": {
+    "items": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "text": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "statement",
+              "question",
+              "yes_no"
+            ]
+          },
+          "icon": {
+            "type": "string"
+          },
+          "audioReady": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "id",
+          "text",
+          "kind",
+          "audioReady"
+        ],
+        "additionalProperties": false
+      }
+    }
+  },
+  "required": [
+    "items"
+  ],
+  "additionalProperties": false
+}
