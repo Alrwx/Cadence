@@ -1,5 +1,6 @@
 // Dev server only, before the app renders.
 import { Vector3 } from "three";
+import { useRecenter } from "../layout/UIAnchor.tsx";
 import { dwellTargets } from "../selection/targets.ts";
 import { store, useHeadset } from "../session.ts";
 import { useSettings } from "../settings.ts";
@@ -16,6 +17,7 @@ export async function setupDev(): Promise<void> {
       store,
       useHeadset,
       useSettings,
+      useRecenter,
       xrStore,
       emulator,
       /** Every pressable button: its label and world-space center. */

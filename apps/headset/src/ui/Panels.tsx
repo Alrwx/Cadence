@@ -5,20 +5,24 @@ import { layout } from "../config.ts";
 import { rememberSpoken, send, useCadence, useHeadset } from "../session.ts";
 import { Button3D } from "./Button3D.tsx";
 import { SettingsPanel } from "./SettingsPanel.tsx";
+import { requestRecenter, useRecenter } from "../layout/UIAnchor.tsx";
 
 const ROW = layout.buttonHeight + 0.015;
+// Tilted back so the panel faces the eyes from below the line of sight.
+const PANEL_TILT = Math.atan2(layout.panelOffset[1], -layout.panelOffset[2]);
 
 export function Panels() {
   const state = useCadence((s) => s.state);
   const [settingsOpen, setSettingsOpen] = useState(false);
   return (
-    <group position={layout.panelPosition} rotation={[layout.panelTilt, 0, 0]}>
+    <group position={layout.panelOffset} rotation={[PANEL_TILT, 0, 0]}>
       <StatusLine />
       {settingsOpen ? (
         <SettingsPanel onClose={() => setSettingsOpen(false)} />
       ) : (
         <>
-          <Button3D label="Settings" width={0.14} height={0.045} color="#3d4a5c" position={[0.45, 0.2, 0]} onPress={() => setSettingsOpen(true)} />
+          <Button3D label="Recenter" width={0.14} height={0.045} color="#3d4a5c" position={[-0.4, 0.27, 0]} onPress={requestRecenter} />
+          <Button3D label="Settings" width={0.14} height={0.045} color="#3d4a5c" position={[0.4, 0.27, 0]} onPress={() => setSettingsOpen(true)} />
           {state === "COMPOSING" ? <ComposeBoard /> : <Replies />}
           <InstantRow />
           <SavedPhrases />
@@ -33,9 +37,15 @@ function StatusLine() {
   const caption = useCadence((s) => s.captions.at(-1) ?? "");
   const state = useCadence((s) => s.state);
   const error = useCadence((s) => s.lastError);
+  const recentering = useRecenter((s) => s.announced);
+  const text = recentering
+    ? "Look where you want the panels…"
+    : error
+      ? error.message
+      : partial || caption || (state === "IDLE" ? "Tap Start on the phone" : "Listening…");
   return (
-    <Text position={[0, 0.2, 0]} fontSize={0.018} maxWidth={0.9} color={error ? "#ffb4a8" : "#ddd"} anchorY="bottom">
-      {error ? error.message : partial || caption || (state === "IDLE" ? "Tap Start on the phone" : "Listening…")}
+    <Text position={[0, 0.2, 0]} fontSize={0.018} maxWidth={0.9} color={error && !recentering ? "#ffb4a8" : "#ddd"} anchorY="bottom">
+      {text}
     </Text>
   );
 }

@@ -1,5 +1,5 @@
-// A large pinch/poke target with a text label. Hands, controllers, and the desktop emulator fire onClick;
-// the head pointer presses it after a dwell.
+// A large pinch/poke target with a text label. Hands, controllers, and the desktop emulator press it by
+// pointer; the head pointer presses it after a dwell.
 import { RoundedBox, Text } from "@react-three/drei";
 import { useEffect, useId, useRef, useState } from "react";
 import type { Mesh } from "three";
@@ -34,6 +34,7 @@ export function Button3D({
   const [pointerHover, setPointerHover] = useState(false);
   const headHover = useHeadHover((s) => s.id === id);
   const lastPress = useRef(0);
+  const pinchedBy = useRef<number | null>(null);
   const latest = useRef({ onPress, disabled, headSelectable });
   latest.current = { onPress, disabled, headSelectable };
 
@@ -65,13 +66,22 @@ export function Button3D({
         ref={mesh}
         args={[width, height, 0.015]}
         radius={0.012}
-        onClick={() => handsEnabled(useSettings.getState().inputMode) && press()}
+        // Not onClick: pointer-events only clicks when the release comes within 300 ms, so a slow pinch
+        // (common after a stroke) would never press. A release on the button that was pinched always does.
+        onPointerDown={(e) => (pinchedBy.current = e.pointerId)}
+        onPointerUp={(e) => {
+          if (pinchedBy.current !== e.pointerId) return;
+          pinchedBy.current = null;
+          if (handsEnabled(useSettings.getState().inputMode)) press();
+        }}
         onPointerOver={() => setPointerHover(true)}
         onPointerOut={() => setPointerHover(false)}
       >
         <meshStandardMaterial color={disabled ? "#444" : hovered ? "#4a86d0" : color} />
       </RoundedBox>
+      {/* The label must not catch rays: a pinch on the text would hit it instead of the button. */}
       <Text
+        raycast={ignoreRays}
         position={[0, 0, 0.009]}
         fontSize={layout.fontSize}
         maxWidth={width - 0.03}
@@ -85,3 +95,5 @@ export function Button3D({
     </group>
   );
 }
+
+const ignoreRays = () => {};

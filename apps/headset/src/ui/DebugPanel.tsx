@@ -30,7 +30,7 @@ export function DebugPanel() {
   ];
 
   return (
-    <group position={layout.debugPanelPosition} rotation={[0, layout.debugPanelYaw, 0]}>
+    <group position={layout.debugPanelOffset} rotation={[0, layout.debugPanelYaw, 0]}>
       {RECORDING_LABELS.map((label, i) => (
         <Button3D
           key={label}

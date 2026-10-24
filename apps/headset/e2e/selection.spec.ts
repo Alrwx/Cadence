@@ -36,6 +36,11 @@ test("pinching a reply selects it", async ({ page }) => {
   await expect.poll(() => selectedSuggestions(page)).toEqual(["sg_2"]);
 });
 
+test("a slow pinch still selects", async ({ page }) => {
+  await pinch(page, REPLY, 1.5);
+  await expect.poll(() => selectedSuggestions(page)).toEqual(["sg_2"]);
+});
+
 test("head-only mode ignores pinches but still selects by looking", async ({ page }) => {
   await page.evaluate(() => window.cadence.useSettings.setState({ inputMode: "head" }));
   await pinch(page, REPLY);

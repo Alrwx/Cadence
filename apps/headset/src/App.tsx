@@ -4,6 +4,7 @@ import { useRef, useState } from "react";
 import { debugEnabled } from "./dev/debug.ts";
 import { DebugHud } from "./dev/DebugHud.tsx";
 import { HandGestures } from "./gestures/HandGestures.tsx";
+import { UIAnchor } from "./layout/UIAnchor.tsx";
 import { HeadPointer } from "./selection/HeadPointer.tsx";
 import { useCadence } from "./session.ts";
 import { DebugPanel } from "./ui/DebugPanel.tsx";
@@ -31,10 +32,12 @@ export function App() {
         <XR store={xrStore}>
           <ambientLight intensity={1.2} />
           <directionalLight position={[1, 2, 1]} />
-          <Panels />
+          <UIAnchor>
+            <Panels />
+            {debugEnabled && <DebugPanel />}
+          </UIAnchor>
           <HandGestures />
           <HeadPointer />
-          {debugEnabled && <DebugPanel />}
           <OnFirstFrame run={() => setSceneReady(true)} />
         </XR>
       </Canvas>

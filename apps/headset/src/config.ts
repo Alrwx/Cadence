@@ -35,18 +35,20 @@ export const selection = {
 } as const;
 
 export const layout = {
-  /** Panels sit at chest/lap height to reduce arm fatigue; y is meters above the floor. */
-  panelPosition: [0, 1.1, -0.55] as [number, number, number],
-  /** Tilt panels back toward the user (radians). */
-  panelTilt: -0.35,
+  /** Panels sit below the line of sight, at chest height, to reduce arm fatigue (meters from the head). */
+  panelOffset: [0, -0.35, -0.6] as [number, number, number],
   buttonWidth: 0.34,
   buttonHeight: 0.07,
   fontSize: 0.022,
   /** Ignore repeat presses on the same button within this window (ms). */
   pressDebounceMs: 600,
-  /** The ?debug panel floats to the user's left, turned toward them (radians). */
-  debugPanelPosition: [-0.75, 1.5, -0.6] as [number, number, number],
+  /** The ?debug panel floats to the user's left, turned toward them (meters from the head; radians). */
+  debugPanelOffset: [-0.6, -0.1, -0.45] as [number, number, number],
   debugPanelYaw: 0.6,
+  /** After pressing Recenter, the user has this long to look where the panels should go (ms). */
+  recenterCountdownMs: 2500,
+  /** Head poses settle for this long after entering AR or a system recenter before the UI follows (ms). */
+  recenterSettleMs: 300,
 } as const;
 
 /** Gesture → instant phraseId sent to the gateway. Palm-pinch is reserved by the Quest system; never map it. */
