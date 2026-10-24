@@ -33,6 +33,15 @@ func (c *Cache) Put(id string, wav []byte) error {
 	return nil
 }
 
+// Has reports whether the clip's file exists (the DB row can outlive a wiped clips directory).
+func (c *Cache) Has(id string) bool {
+	if !validID.MatchString(id) {
+		return false
+	}
+	_, err := os.Stat(filepath.Join(c.Dir, id+".wav"))
+	return err == nil
+}
+
 // ServeHTTP handles GET /clips/{id}; the route pattern must name the wildcard "file" (e.g. /clips/{file}).
 func (c *Cache) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	file := r.PathValue("file")

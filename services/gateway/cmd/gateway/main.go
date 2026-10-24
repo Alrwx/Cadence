@@ -20,6 +20,8 @@ import (
 	"github.com/Alrwx/Cadence/services/gateway/internal/store"
 )
 
+const defaultPersonID = "person_default"
+
 func main() {
 	if err := run(); err != nil {
 		slog.Error("gateway stopped", "err", err)
@@ -43,7 +45,17 @@ func run() error {
 	}
 	mc := models.New(cfg.ModelsURL)
 
-	h := hub.New(orchestrator.New(st, mc, cc))
+	// Single-user for the hackathon: one person, seeded with the starter phrase groups on first run.
+	ctx := context.Background()
+	if _, err := st.EnsurePerson(ctx, defaultPersonID, "Default", store.DefaultLocale); err != nil {
+		return err
+	}
+	locale, err := st.PersonLocale(ctx, defaultPersonID)
+	if err != nil {
+		return err
+	}
+
+	h := hub.New(orchestrator.New(st, mc, cc, defaultPersonID, locale))
 	h.OriginPatterns = []string{"*:5173", "*:5174"} // Vite dev servers
 
 	mux := http.NewServeMux()
