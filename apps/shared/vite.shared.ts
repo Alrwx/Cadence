@@ -1,5 +1,5 @@
 // Shared Vite dev-server settings for the headset and phone apps.
-// Both dev servers proxy /ws and /clips to the gateway, so the apps only ever use same-origin URLs.
+// Both dev servers proxy /ws, /clips and /api to the gateway, so the apps only ever use same-origin URLs.
 import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import type { ServerOptions } from "vite";
@@ -20,6 +20,7 @@ export function devServer(port: number): ServerOptions {
     proxy: {
       "/ws": { target, ws: true, secure: false },
       "/clips": { target, secure: false },
+      "/api": { target, secure: false }, // consent + voice upload
     },
   };
 }

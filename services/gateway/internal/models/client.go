@@ -82,12 +82,12 @@ func (c *Client) Suggest(ctx context.Context, req SuggestRequest) (SuggestRespon
 	return resp, err
 }
 
-// TTS returns WAV bytes for text in the given voice.
-func (c *Client) TTS(ctx context.Context, voiceID, text string) ([]byte, error) {
+// TTS returns WAV bytes for text in the given voice and locale.
+func (c *Client) TTS(ctx context.Context, voiceID, text, locale string) ([]byte, error) {
 	ctx, cancel := context.WithTimeout(ctx, TTSTimeout)
 	defer cancel()
 	var wav []byte
-	err := c.do(ctx, http.MethodPost, "/tts", map[string]string{"voiceId": voiceID, "text": text}, &wav)
+	err := c.do(ctx, http.MethodPost, "/tts", map[string]string{"voiceId": voiceID, "text": text, "locale": locale}, &wav)
 	return wav, err
 }
 

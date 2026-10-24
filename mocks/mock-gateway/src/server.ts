@@ -229,6 +229,77 @@ function handle(s: Session, from: Role, event: CadenceEvent): void {
   }
 }
 
+// Consent + voice upload, the shape proposed in docs/proposals/2026-10-24-voice-upload-endpoints.md.
+const MAX_SAMPLE_BYTES = 25 * 1024 * 1024;
+const VOICE_DELAY_MS = Number(process.env.VOICE_DELAY_MS ?? 1500);
+const consents = new Set<string>();
+let voiceCounter = 0;
+
+function json(res: ServerResponse, status: number, body: unknown): void {
+  res.writeHead(status, { "Content-Type": "application/json" }).end(JSON.stringify(body));
+}
+
+function readBody(req: IncomingMessage, limit: number): Promise<Buffer | null> {
+  return new Promise((resolve, reject) => {
+    const chunks: Buffer[] = [];
+    let size = 0;
+    req.on("data", (chunk: Buffer) => {
+      size += chunk.length;
+      if (size <= limit) chunks.push(chunk);
+    });
+    req.on("end", () => resolve(size > limit ? null : Buffer.concat(chunks)));
+    req.on("error", reject);
+  });
+}
+
+/** Pulls a plain text field out of a multipart body. Good enough for a mock; the real gateway uses a parser. */
+function formField(body: Buffer, name: string): string | undefined {
+  const match = new RegExp(`name="${name}"\\r\\n\\r\\n([^\\r]*)\\r\\n`).exec(body.toString("latin1"));
+  return match?.[1];
+}
+
+async function handleApi(req: IncomingMessage, res: ServerResponse): Promise<void> {
+  if (req.method === "POST" && req.url === "/api/consent") {
+    const body = await readBody(req, 64 * 1024);
+    const data = JSON.parse(body?.toString() || "{}") as Record<string, unknown>;
+    const missing = ["sessionId", "kind", "voiceOwner", "statement"].filter(
+      (k) => typeof data[k] !== "string" || !(data[k] as string).trim(),
+    );
+    if (missing.length) return json(res, 400, { code: "bad_request", message: `Missing ${missing.join(", ")}.` });
+    const consentId = `c_${consents.size + 1}`;
+    consents.add(consentId);
+    console.log(`consent ${consentId}: ${String(data.voiceOwner)} (${String(data.statement)})`);
+    return json(res, 201, { consentId });
+  }
+  if (req.method === "POST" && req.url === "/api/voices") {
+    if (!req.headers["content-type"]?.startsWith("multipart/form-data")) {
+      return json(res, 400, { code: "bad_request", message: "Expected multipart/form-data." });
+    }
+    const body = await readBody(req, MAX_SAMPLE_BYTES);
+    if (!body) return json(res, 413, { code: "too_large", message: "The sample is over 25 MB." });
+    const consentId = formField(body, "consentId");
+    if (!formField(body, "sessionId") || !body.includes('name="audio"')) {
+      return json(res, 400, { code: "bad_request", message: "Missing audio or sessionId." });
+    }
+    if (!consentId || !consents.has(consentId)) {
+      return json(res, 403, { code: "no_consent", message: "No consent record for this voice." });
+    }
+    await new Promise((r) => setTimeout(r, VOICE_DELAY_MS)); // stands in for transcription + voice prompt
+    const voiceId = `v_${++voiceCounter}`;
+    console.log(`voice ${voiceId} from ${body.length} bytes (consent ${consentId})`);
+    return json(res, 201, { voiceId });
+  }
+  json(res, 404, { code: "not_found", message: "Unknown API route." });
+}
+
+function handleHttp(req: IncomingMessage, res: ServerResponse): void {
+  if (req.url?.startsWith("/api/")) {
+    handleApi(req, res).catch((err: unknown) => json(res, 400, { code: "bad_request", message: String(err) }));
+    return;
+  }
+  serveClip(req, res);
+}
+
 function serveClip(req: IncomingMessage, res: ServerResponse): void {
   const match = /^\/clips\/([\w-]+)\.wav$/.exec(req.url ?? "");
   if (!match) {
@@ -243,8 +314,8 @@ const cert = resolve(root, process.env.TLS_CERT ?? "certs/dev.pem");
 const key = resolve(root, process.env.TLS_KEY ?? "certs/dev-key.pem");
 const tls = existsSync(cert) && existsSync(key);
 const server = tls
-  ? createHttps({ cert: readFileSync(cert), key: readFileSync(key) }, serveClip)
-  : createHttp(serveClip);
+  ? createHttps({ cert: readFileSync(cert), key: readFileSync(key) }, handleHttp)
+  : createHttp(handleHttp);
 
 const wss = new WebSocketServer({ server, path: "/ws" });
 wss.on("connection", (ws, req) => {
