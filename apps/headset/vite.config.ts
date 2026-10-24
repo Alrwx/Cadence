@@ -8,5 +8,5 @@ export default defineConfig({
   base: "/headset/", // the gateway serves the built app at /headset/
   // @iwer/devui (desktop emulator) bundles its own three.js 0.165; two copies in one scene break rendering.
   resolve: { dedupe: ["three"] },
-  server: devServer(5173),
+  server: devServer(Number(process.env.HEADSET_PORT ?? 5173)),
 });

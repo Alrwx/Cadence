@@ -7,13 +7,16 @@ import { defineConfig } from "@playwright/test";
 // The dev servers use HTTPS when `make certs` has run, plain HTTP otherwise.
 const root = resolve(import.meta.dirname, "../..");
 const scheme = existsSync(resolve(root, process.env.TLS_CERT ?? "certs/dev.pem")) ? "https" : "http";
-const MOCK_GATEWAY = `${scheme}://localhost:8444`;
+// Override both ports to run a second checkout's tests while another checkout's servers are up.
+const HEADSET_PORT = process.env.HEADSET_PORT ?? "5173";
+const MOCK_GATEWAY_PORT = process.env.MOCK_GATEWAY_PORT ?? "8444";
+const MOCK_GATEWAY = `${scheme}://localhost:${MOCK_GATEWAY_PORT}`;
 
 export default defineConfig({
   testDir: "e2e",
   timeout: 30_000,
   use: {
-    baseURL: `${scheme}://localhost:5173`,
+    baseURL: `${scheme}://localhost:${HEADSET_PORT}`,
     ignoreHTTPSErrors: true,
     launchOptions: { args: ["--use-angle=swiftshader", "--enable-unsafe-swiftshader"] },
   },
@@ -25,13 +28,14 @@ export default defineConfig({
       ignoreHTTPSErrors: true,
       reuseExistingServer: true,
       cwd: root,
+      env: { PORT: MOCK_GATEWAY_PORT },
     },
     {
       command: "pnpm dev",
-      url: `${scheme}://localhost:5173/headset/`,
+      url: `${scheme}://localhost:${HEADSET_PORT}/headset/`,
       ignoreHTTPSErrors: true,
       reuseExistingServer: true,
-      env: { GATEWAY_TARGET: MOCK_GATEWAY },
+      env: { GATEWAY_TARGET: MOCK_GATEWAY, HEADSET_PORT },
     },
   ],
 });
