@@ -60,6 +60,18 @@ test("leaving and coming back starts over and can fire again", () => {
   assert.equal(d.update("a", FORWARD, 1800, OPTS).fired, "a");
 });
 
+test("a target that appears under a resting head waits for the head to leave it", () => {
+  const d = new DwellTracker();
+  d.update("a", FORWARD, 0, OPTS);
+  d.update("a", FORWARD, 800, OPTS);
+  d.update(null, FORWARD, 850, OPTS);
+  d.update("b", FORWARD, 900, OPTS, true);
+  assert.equal(d.update("b", FORWARD, 3000, OPTS).fired, null);
+  d.update("c", towards(20), 3100, OPTS);
+  d.update("b", FORWARD, 3200, OPTS);
+  assert.equal(d.update("b", FORWARD, 4000, OPTS).fired, "b");
+});
+
 test("a fast head turn restarts the dwell", () => {
   const d = new DwellTracker();
   d.update("a", towards(0), 0, OPTS);
