@@ -6,6 +6,7 @@ import { requestRecenter, useRecenter } from "../layout/UIAnchor.tsx";
 import { useCadence, useHeadset } from "../session.ts";
 import { t } from "../strings.ts";
 import { Button3D } from "./Button3D.tsx";
+import { ConversationsView } from "./ConversationsView.tsx";
 import { MainView } from "./MainView.tsx";
 import { SavedPhrasesView } from "./SavedPhrasesView.tsx";
 import { SettingsPanel } from "./SettingsPanel.tsx";
@@ -28,6 +29,7 @@ export function Panels() {
   let content;
   if (sessionState === "COMPOSING") content = <TextEntryView />;
   else if (view.kind === "saved") content = <SavedPhrasesView />;
+  else if (view.kind === "conversations") content = <ConversationsView />;
   else if (view.kind === "settings") content = <SettingsPanel onClose={() => showView({ kind: "main" })} />;
   else content = <MainView />;
 
@@ -38,6 +40,14 @@ export function Panels() {
       {showTopBar && (
         <>
           <Button3D label={t("top.recenter")} width={0.14} height={0.045} color={QUIET} position={[-0.4, 0.27, 0]} onPress={requestRecenter} />
+          <Button3D
+            label={t("top.conversations")}
+            width={0.2}
+            height={0.045}
+            color={QUIET}
+            position={[0, 0.27, 0]}
+            onPress={() => showView({ kind: "conversations" })}
+          />
           <Button3D
             label={t("top.settings")}
             width={0.14}

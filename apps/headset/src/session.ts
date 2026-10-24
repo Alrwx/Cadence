@@ -3,13 +3,17 @@ import { createCadenceStore, GatewayConnection, sessionIdFromUrl } from "@cadenc
 import type { CadenceState } from "@cadence/shared";
 import type { EventDataMap, EventType } from "@cadence/protocol";
 import { create, useStore } from "zustand";
+import { receiveConversations } from "./conversations.ts";
 
 export const store = createCadenceStore();
 
 export const connection = new GatewayConnection({
   role: "headset",
   sessionId: sessionIdFromUrl(),
-  onEvent: (event) => store.getState().applyEvent(event),
+  onEvent: (event) => {
+    store.getState().applyEvent(event);
+    if (event.type === "conversations") receiveConversations(event.data.items);
+  },
   onStatus: (status) => store.getState().setConnection(status),
 });
 
