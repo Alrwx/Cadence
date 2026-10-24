@@ -5,7 +5,8 @@
   "type": "module",
   "exports": {
     ".": "./src/index.ts",
-    "./vite": "./vite.shared.ts"
+    "./vite": "./vite.shared.ts",
+    "./i18n": "./src/i18n.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit",

@@ -1,20 +1,70 @@
+import type { AudioPlayData } from "@cadence/protocol";
 import { createCadenceStore, GatewayConnection, sessionIdFromUrl, type CadenceState } from "@cadence/shared";
-import { useEffect, useRef, useState } from "react";
+import { t } from "@cadence/shared/i18n";
+import { useEffect, useState } from "react";
 import { useStore } from "zustand";
+import { createStore } from "zustand/vanilla";
 import { PhoneAudio } from "./audio.ts";
+import { keepScreenOn } from "./wakeLock.ts";
 
 const store = createCadenceStore();
 const useCadence = <T,>(select: (s: CadenceState) => T): T => useStore(store, select);
 
+/** The clip actually coming out of the speaker; the shared store's nowPlaying is just the latest audio.play. */
+const playback = createStore<{ playing: AudioPlayData | null; error: string | null }>()(() => ({
+  playing: null,
+  error: null,
+}));
+
+/** Created inside the Start tap; null until then, so nothing can ever play before the user taps. */
+let audio: PhoneAudio | null = null;
+const heldClips: AudioPlayData[] = [];
+const unsentDone: string[] = [];
+
+const errorMessage = (err: unknown): string => (err instanceof Error ? err.message : String(err));
+
+function playClip(clip: AudioPlayData): void {
+  if (!audio) {
+    heldClips.push(clip);
+    return;
+  }
+  audio
+    .enqueue(clip.url, () => playback.setState({ playing: clip }))
+    .then(
+      () => playback.setState({ error: null }),
+      (err) => {
+        console.error("playback failed", err);
+        playback.setState({ error: errorMessage(err) });
+      },
+    )
+    .finally(() => {
+      if (playback.getState().playing === clip) playback.setState({ playing: null });
+      reportDone(clip.clipId);
+    });
+}
+
+// The gateway stays in SPEAKING until it gets audio.done, so one lost while offline is sent on reconnect.
+function reportDone(clipId: string): void {
+  if (!connection.send("audio.done", { clipId })) unsentDone.push(clipId);
+}
+
 const connection = new GatewayConnection({
   role: "phone",
   sessionId: sessionIdFromUrl(),
-  onEvent: (event) => store.getState().applyEvent(event),
+  onEvent: (event) => {
+    store.getState().applyEvent(event);
+    if (event.type === "audio.play") playClip(event.data);
+  },
   onStatus: (status) => store.getState().setConnection(status),
+  // A restarted gateway is back in IDLE and needs the unlock again; otherwise it ignores the repeat.
+  onOpen: () => {
+    if (audio) connection.send("phone.unlock", {});
+    unsentDone.splice(0).forEach(reportDone);
+  },
 });
 
 export function App() {
-  const [audio, setAudio] = useState<PhoneAudio | null>(null);
+  const [started, setStarted] = useState(false);
   const [micError, setMicError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -23,55 +73,49 @@ export function App() {
   }, []);
 
   const start = async () => {
-    // Created inside the tap so playback is allowed later without another tap.
-    const a = new PhoneAudio();
-    setAudio(a);
-    connection.send("phone.unlock", {});
+    // Everything that needs a user gesture happens synchronously inside this tap.
+    audio ??= new PhoneAudio();
+    heldClips.splice(0).forEach(playClip);
+    keepScreenOn();
+    setStarted(true);
+    connection.send("phone.unlock", {}); // if the socket isn't open yet, onOpen sends it
+    const onMicError = (err: unknown) => setMicError(errorMessage(err));
     try {
-      await a.startMic((frame) => connection.sendAudio(frame));
+      await audio.startMic((frame) => connection.sendAudio(frame), onMicError);
     } catch (err) {
-      setMicError(err instanceof Error ? err.message : String(err));
+      onMicError(err);
     }
   };
 
-  if (!audio) {
+  if (!started) {
     return (
       <div className="start">
-        <button onClick={start}>Start</button>
+        <button onClick={start}>{t("phone.start")}</button>
+        <p className="hint">{t("phone.startHint")}</p>
       </div>
     );
   }
-  return <Main audio={audio} micError={micError} />;
+  return <Main micError={micError} />;
 }
 
-function Main({ audio, micError }: { audio: PhoneAudio; micError: string | null }) {
+function Main({ micError }: { micError: string | null }) {
   const state = useCadence((s) => s.state);
   const status = useCadence((s) => s.connection);
   const captions = useCadence((s) => s.captions);
   const partial = useCadence((s) => s.partial);
-  const nowPlaying = useCadence((s) => s.nowPlaying);
-  const lastPlayed = useRef<typeof nowPlaying>(null);
-
-  // Play each audio.play event once, then report audio.done. Compare events, not clip ids: cached clips
-  // are reused, so saying "Yes" twice sends the same clipId twice. (The ref also absorbs StrictMode's double effect.)
-  useEffect(() => {
-    if (!nowPlaying || lastPlayed.current === nowPlaying) return;
-    lastPlayed.current = nowPlaying;
-    audio
-      .play(nowPlaying.url)
-      .catch((err) => console.error("playback failed", err))
-      .finally(() => connection.send("audio.done", { clipId: nowPlaying.clipId }));
-  }, [audio, nowPlaying]);
+  const playing = useStore(playback, (s) => s.playing);
+  const playError = useStore(playback, (s) => s.error);
 
   const answering = state === "CHOOSING" || state === "COMPOSING";
   return (
     <div className="main">
-      <div className="status">
-        gateway: {status} · {state}
-        {micError && ` · mic error: ${micError}`}
+      <div className={`status ${status}`}>
+        {t(`status.${status}`)}
+        {micError && <div className="error">{t("phone.micError", { error: micError })}</div>}
+        {playError && <div className="error">{t("phone.playError", { error: playError })}</div>}
       </div>
-      {answering && <div className="ring">I'm answering…</div>}
-      {state === "SPEAKING" && nowPlaying && <div className="speaking">“{nowPlaying.text}”</div>}
+      {answering && <div className="ring">{t("phone.answering")}</div>}
+      {playing && <div className="speaking">“{playing.text}”</div>}
       <div className="captions">
         {captions.slice(-4).map((c, i) => (
           <div key={i}>{c}</div>
