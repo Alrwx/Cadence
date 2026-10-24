@@ -158,6 +158,27 @@ func (c *client) expectState(want string) {
 	c.expect(protocol.TypeState, &st, func() bool { return st.State == want })
 }
 
+// expectStateTurn reads events until a state event announces want, and returns its turnId.
+func (c *client) expectStateTurn(want string) string {
+	c.t.Helper()
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	for {
+		_, msg, err := c.conn.Read(ctx)
+		if err != nil {
+			c.t.Fatalf("waiting for state %s: %v", want, err)
+		}
+		var env protocol.Envelope
+		var st protocol.StateData
+		if json.Unmarshal(msg, &env) != nil || env.Type != protocol.TypeState || json.Unmarshal(env.Data, &st) != nil {
+			continue
+		}
+		if st.State == want {
+			return env.TurnID
+		}
+	}
+}
+
 // expect reads events until one of eventType satisfies match, decoding it into out.
 func (c *client) expect(eventType string, out any, match func() bool) {
 	c.t.Helper()
@@ -424,6 +445,55 @@ func TestSuggestionPipelineEndToEnd(t *testing.T) {
 	h := o.session("s1").history
 	if len(h) != 2 || h[1] != (models.Turn{Speaker: "user", Text: pick.Text}) {
 		t.Fatalf("history = %+v", h)
+	}
+}
+
+// A phone that reconnects mid-turn (and re-sends phone.unlock, as apps/phone does) must not end the turn or
+// reopen the speech stream; state events carry the new turnId so clients drop the previous turn's suggestions.
+func TestPhoneReconnectKeepsTheTurn(t *testing.T) {
+	fm := &fakeModels{}
+	o := newTestOrchestrator(t, fm)
+	srv := httptest.NewServer(hub.New(o))
+	t.Cleanup(srv.Close)
+	headset := dial(t, srv.URL, "headset")
+	phone := dial(t, srv.URL, "phone")
+	phone.send(protocol.TypePhoneUnlock, protocol.PhoneUnlockData{})
+	phone.expectState("LISTENING")
+
+	phone.sendAudio(make([]byte, 640))
+	if turn := headset.expectStateTurn("SUGGESTING"); turn != "t_1" {
+		t.Fatalf("SUGGESTING turnId = %q, want t_1", turn)
+	}
+	var sugg protocol.SuggestionsData
+	headset.expect(protocol.TypeSuggestions, &sugg, nil)
+	if turn := headset.expectStateTurn("CHOOSING"); turn != "t_1" {
+		t.Fatalf("CHOOSING turnId = %q, want t_1", turn)
+	}
+
+	phone.conn.CloseNow()
+	phone = dial(t, srv.URL, "phone")
+	phone.send(protocol.TypeHello, protocol.HelloData{Role: "phone", ClientVersion: "0.1.0"})
+	if turn := phone.expectStateTurn("CHOOSING"); turn != "t_1" {
+		t.Fatalf("state on reconnect has turnId %q, want t_1", turn)
+	}
+	phone.send(protocol.TypePhoneUnlock, protocol.PhoneUnlockData{})
+
+	// The suggestion is still live and plays on the new phone socket.
+	headset.send(protocol.TypeSelect, protocol.SelectData{SuggestionID: sugg.Items[0].ID})
+	var play protocol.AudioPlayData
+	phone.expect(protocol.TypeAudioPlay, &play, nil)
+	if play.Text != sugg.Items[0].Text {
+		t.Fatalf("audio.play = %+v, want %q", play, sugg.Items[0].Text)
+	}
+	phone.send(protocol.TypeAudioDone, protocol.AudioDoneData{ClipID: play.ClipID})
+	phone.expectState("LISTENING")
+
+	// More audio reuses the open stream. compose.start is a barrier (see TestSTTDownKeepsInstantPhrasesWorking).
+	phone.sendAudio(make([]byte, 640))
+	phone.send(protocol.TypeComposeStart, protocol.ComposeStartData{})
+	phone.expectState("COMPOSING")
+	if n := fm.sttDials.Load(); n != 1 {
+		t.Fatalf("%d /stt dials, want 1: the reconnect reopened the speech stream", n)
 	}
 }
 
