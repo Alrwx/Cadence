@@ -1,12 +1,13 @@
 import { Canvas } from "@react-three/fiber";
-import { createXRStore, XR } from "@react-three/xr";
+import { XR } from "@react-three/xr";
 import { useEffect } from "react";
+import { debugEnabled } from "./dev/debug.ts";
+import { DebugHud } from "./dev/DebugHud.tsx";
 import { HandGestures } from "./gestures/HandGestures.tsx";
 import { connection, useCadence } from "./session.ts";
+import { DebugPanel } from "./ui/DebugPanel.tsx";
 import { Panels } from "./ui/Panels.tsx";
-
-// Passthrough AR on the Quest 3S; hands are the primary input, controllers also work.
-const xrStore = createXRStore({ hand: true, controller: true });
+import { xrStore } from "./xr.ts";
 
 export function App() {
   const status = useCadence((s) => s.connection);
@@ -18,6 +19,7 @@ export function App() {
 
   return (
     <>
+      {import.meta.env.DEV && <DebugHud />}
       <div style={{ position: "absolute", zIndex: 1, inset: "auto 0 24px 0", display: "flex", justifyContent: "center", gap: 16 }}>
         <button style={{ fontSize: 28, padding: "16px 48px", borderRadius: 16 }} onClick={() => xrStore.enterAR()}>
           Enter
@@ -30,6 +32,7 @@ export function App() {
           <directionalLight position={[1, 2, 1]} />
           <Panels />
           <HandGestures />
+          {debugEnabled && <DebugPanel />}
         </XR>
       </Canvas>
     </>

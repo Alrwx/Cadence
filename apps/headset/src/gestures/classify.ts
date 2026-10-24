@@ -56,25 +56,47 @@ function rotate(v: Vec3, q: Quat): Vec3 {
   };
 }
 
-export function classify({ joints: j, wristOrientation, head }: HandFrame): Gesture | null {
-  // Distances are in palm lengths so the thresholds hold for small and large hands.
+/** Hand-size-independent features of one hand: reaches in palm lengths, directions as cosines. */
+export interface HandMeasures {
+  /** Index, middle, ring, pinky. */
+  fingerReach: number[];
+  thumbReach: number;
+  pinchGap: number;
+  /** Cosine between the thumb and world up. */
+  thumbUp: number;
+  /** Cosine between the fingers and world up. */
+  fingersUp: number;
+  /** Cosine between the palm and the direction away from the head. */
+  palmAway: number;
+}
+
+export function measure({ joints: j, wristOrientation, head }: HandFrame): HandMeasures {
   const palm = dist(j.wrist, j.middleKnuckle) || 1;
   const reach = (tip: Vec3) => dist(tip, j.wrist) / palm;
-  const fingers = [j.indexTip, j.middleTip, j.ringTip, j.pinkyTip].map(reach);
+  return {
+    fingerReach: [j.indexTip, j.middleTip, j.ringTip, j.pinkyTip].map(reach),
+    thumbReach: reach(j.thumbTip),
+    pinchGap: dist(j.thumbTip, j.indexTip) / palm,
+    thumbUp: unit(sub(j.thumbTip, j.thumbProximal)).y,
+    fingersUp: rotate({ x: 0, y: 0, z: -1 }, wristOrientation).y,
+    palmAway: dot(rotate({ x: 0, y: -1, z: 0 }, wristOrientation), unit(sub(j.wrist, head))),
+  };
+}
 
-  if (fingers.every((r) => r < cfg.curledReach) && reach(j.thumbTip) > cfg.thumbOutReach) {
-    const thumbUp = unit(sub(j.thumbTip, j.thumbProximal)).y;
-    if (thumbUp > cfg.pointingCos) return "thumbsUp";
-    if (thumbUp < -cfg.pointingCos) return "thumbsDown";
+export function classify(hand: HandFrame): Gesture | null {
+  const m = measure(hand);
+  if (m.fingerReach.every((r) => r < cfg.curledReach) && m.thumbReach > cfg.thumbOutReach) {
+    if (m.thumbUp > cfg.pointingCos) return "thumbsUp";
+    if (m.thumbUp < -cfg.pointingCos) return "thumbsDown";
   }
-
-  if (fingers.every((r) => r > cfg.extendedReach) && dist(j.thumbTip, j.indexTip) / palm > cfg.minPinchGap) {
-    const fingersDir = rotate({ x: 0, y: 0, z: -1 }, wristOrientation);
-    const palmDir = rotate({ x: 0, y: -1, z: 0 }, wristOrientation);
-    const awayFromHead = unit(sub(j.wrist, head));
-    if (fingersDir.y > cfg.pointingCos && dot(palmDir, awayFromHead) > cfg.palmAwayCos) return "openPalm";
+  if (
+    m.fingerReach.every((r) => r > cfg.extendedReach) &&
+    m.pinchGap > cfg.minPinchGap &&
+    m.fingersUp > cfg.pointingCos &&
+    m.palmAway > cfg.palmAwayCos
+  ) {
+    return "openPalm";
   }
-
   return null;
 }
 

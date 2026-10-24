@@ -2,7 +2,7 @@
 import { Text } from "@react-three/drei";
 import { useState } from "react";
 import { layout } from "../config.ts";
-import { connection, lastSpokenText, rememberSpoken, useCadence } from "../session.ts";
+import { rememberSpoken, send, useCadence, useHeadset } from "../session.ts";
 import { Button3D } from "./Button3D.tsx";
 
 const ROW = layout.buttonHeight + 0.015;
@@ -44,7 +44,7 @@ function Replies() {
           height={layout.buttonHeight * 1.4}
           onPress={() => {
             rememberSpoken(item.text);
-            connection.send("select", { suggestionId: item.id }, turnId);
+            send("select", { suggestionId: item.id }, turnId);
           }}
         />
       ))}
@@ -68,7 +68,7 @@ function InstantRow() {
           width={0.16}
           color="#2e7d4f"
           position={[(i - 1.5) * 0.18, 0, 0]}
-          onPress={() => connection.send("instant", { phraseId: p.id })}
+          onPress={() => send("instant", { phraseId: p.id })}
         />
       ))}
       <Button3D
@@ -76,7 +76,7 @@ function InstantRow() {
         width={0.2}
         color="#7a4fa0"
         position={[1.5 * 0.18 + 0.02, 0, 0]}
-        onPress={() => connection.send("compose.start", {})}
+        onPress={() => send("compose.start", {})}
       />
     </group>
   );
@@ -84,6 +84,7 @@ function InstantRow() {
 
 function SavedPhrases() {
   const groups = useCadence((s) => s.phraseGroups);
+  const lastSpoken = useHeadset((s) => s.lastSpoken);
   const [groupIndex, setGroupIndex] = useState(0);
   const group = groups[groupIndex] ?? groups[0];
   const y0 = 0.12 - ROW * 2.6;
@@ -106,7 +107,7 @@ function SavedPhrases() {
           label={p.text}
           color="#8a6a2a"
           position={[((i % 3) - 1) * (layout.buttonWidth + 0.02), -ROW * (1 + Math.floor(i / 3)), 0]}
-          onPress={() => connection.send("phrase.speak", { phraseId: p.id })}
+          onPress={() => send("phrase.speak", { phraseId: p.id })}
         />
       ))}
       {group && (
@@ -116,7 +117,8 @@ function SavedPhrases() {
           height={0.05}
           color="#5a4a2a"
           position={[0, -ROW * (2 + Math.floor((group.items.length - 1) / 3)), 0]}
-          onPress={() => lastSpokenText && connection.send("phrase.save", { text: lastSpokenText, groupId: group.id })}
+          disabled={!lastSpoken}
+          onPress={() => lastSpoken && send("phrase.save", { text: lastSpoken, groupId: group.id })}
         />
       )}
     </group>
@@ -146,7 +148,7 @@ function ComposeBoard() {
       ))}
       <group position={[0, -2 * ROW, 0]}>
         <Button3D label="⌫" width={0.12} color="#555" position={[-0.25, 0, 0]} onPress={() => setWords((ws) => ws.slice(0, -1))} />
-        <Button3D label="Cancel" width={0.16} color="#555" position={[-0.08, 0, 0]} onPress={() => connection.send("cancel", {})} />
+        <Button3D label="Cancel" width={0.16} color="#555" position={[-0.08, 0, 0]} onPress={() => send("cancel", {})} />
         <Button3D
           label="Speak"
           width={0.2}
@@ -155,7 +157,7 @@ function ComposeBoard() {
           position={[0.13, 0, 0]}
           onPress={() => {
             rememberSpoken(text);
-            connection.send("compose.submit", { text });
+            send("compose.submit", { text });
             setWords([]);
           }}
         />

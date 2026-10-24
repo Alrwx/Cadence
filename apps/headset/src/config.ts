@@ -31,6 +31,9 @@ export const layout = {
   fontSize: 0.022,
   /** Ignore repeat presses on the same button within this window (ms). */
   pressDebounceMs: 600,
+  /** The ?debug panel floats to the user's left, turned toward them (radians). */
+  debugPanelPosition: [-0.75, 1.5, -0.6] as [number, number, number],
+  debugPanelYaw: 0.6,
 } as const;
 
 /** Gesture → instant phraseId sent to the gateway. Palm-pinch is reserved by the Quest system; never map it. */
