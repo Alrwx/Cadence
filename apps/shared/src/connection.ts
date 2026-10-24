@@ -17,6 +17,8 @@ export interface ConnectionOptions {
   clientVersion?: string;
   onEvent: (event: CadenceEvent) => void;
   onStatus?: (status: ConnectionStatus) => void;
+  /** Runs after `hello` on every connect and reconnect, e.g. to re-send state the gateway lost (phone.unlock). */
+  onOpen?: () => void;
 }
 
 const MIN_BACKOFF_MS = 500;
@@ -46,8 +48,10 @@ export class GatewayConnection {
     ws.binaryType = "arraybuffer";
     ws.onopen = () => {
       this.attempt = 0;
-      this.opts.onStatus?.("open");
+      // hello goes first so the gateway knows who we are before anything else arrives.
       this.send("hello", { role: this.opts.role, clientVersion: this.opts.clientVersion ?? "0.1.0" });
+      this.opts.onStatus?.("open");
+      this.opts.onOpen?.();
     };
     ws.onmessage = (msg) => {
       if (typeof msg.data !== "string") return;
