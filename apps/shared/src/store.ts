@@ -36,8 +36,11 @@ export const createCadenceStore = () =>
     applyEvent: (event) =>
       set((s) => {
         switch (event.type) {
-          case "state":
-            return { state: event.data.state, turnId: event.turnId ?? s.turnId };
+          case "state": {
+            const turnId = event.turnId ?? s.turnId;
+            // A new turn makes the previous turn's suggestions stale.
+            return turnId !== s.turnId ? { state: event.data.state, turnId, suggestions: [] } : { state: event.data.state };
+          }
           case "transcript.partial":
             return { partial: event.data.text };
           case "transcript.final":
