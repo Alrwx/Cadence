@@ -55,7 +55,9 @@ export interface DwellUpdate {
   fired: string | null;
 }
 
-/** Fires once per visit: after a selection the head has to leave the target before it can fire again. */
+/** Fires once per visit: after a selection the head has to leave the target before it can fire again.
+ * A target that appears under the reticle (a press switched the view) counts as visited already, so it never
+ * presses itself while the head rests where the last press was. */
 export class DwellTracker {
   private hover: string | null = null;
   private since = 0;
@@ -63,7 +65,7 @@ export class DwellTracker {
   private lastDir: Vec3 | null = null;
   private lastTime = 0;
 
-  update(hover: string | null, dir: Vec3, now: number, opts: DwellOptions): DwellUpdate {
+  update(hover: string | null, dir: Vec3, now: number, opts: DwellOptions, appeared = false): DwellUpdate {
     const seconds = Math.max((now - this.lastTime) / 1000, 1e-3);
     const speed = this.lastDir ? Math.acos(Math.min(1, dot(this.lastDir, dir))) / seconds : 0;
     this.lastDir = dir;
@@ -72,7 +74,7 @@ export class DwellTracker {
     if (hover !== this.hover) {
       this.hover = hover;
       this.since = now;
-      this.fired = false;
+      this.fired = appeared;
     }
     if (speed > opts.maxHeadSpeed) this.since = now;
     if (!hover || this.fired) return { hover, progress: 0, fired: null };
