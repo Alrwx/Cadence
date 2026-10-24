@@ -5,8 +5,9 @@ import { create } from "zustand";
 import { gesturePhrases } from "../config.ts";
 import { debugEnabled } from "../dev/debug.ts";
 import { recordFrame } from "../dev/handRecorder.ts";
-import { send } from "../session.ts";
+import { rememberSpeech, send } from "../session.ts";
 import { handsEnabled, useSettings } from "../settings.ts";
+import { t } from "../strings.ts";
 import {
   classify,
   GestureDebouncer,
@@ -28,7 +29,9 @@ export const useHandReadout = create<HandReadout>(() => ({ hands: {} }));
 const READOUT_INTERVAL_MS = 100;
 
 export function fireGesture(gesture: Gesture): void {
-  send("instant", { phraseId: gesturePhrases[gesture] });
+  const { phraseId, label } = gesturePhrases[gesture];
+  rememberSpeech(t(label), false);
+  send("instant", { phraseId });
 }
 
 export function HandGestures() {

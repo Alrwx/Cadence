@@ -4,6 +4,7 @@ import { useRecenter } from "../layout/UIAnchor.tsx";
 import { dwellTargets } from "../selection/targets.ts";
 import { store, useHeadset } from "../session.ts";
 import { useSettings } from "../settings.ts";
+import { useView } from "../ui/views.ts";
 import { xrStore } from "../xr.ts";
 import { installEmulator } from "./emulator.ts";
 import { forwardConsole } from "./remoteConsole.ts";
@@ -18,6 +19,7 @@ export async function setupDev(): Promise<void> {
       useHeadset,
       useSettings,
       useRecenter,
+      useView,
       xrStore,
       emulator,
       /** Every pressable button: its label and world-space center. */

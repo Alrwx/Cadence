@@ -10,12 +10,17 @@ interface Settings {
   dwellMs: number;
 }
 
+// Hands by default: with head selection on, merely looking down to read the panel rests the reticle on a
+// button and speaks it. Turn head selection on in Settings, or preset it for a bedside setup with ?input=head.
 export const useSettings = create<Settings>()(
-  persist((): Settings => ({ inputMode: "both", dwellMs: selection.dwellMs }), {
+  persist((): Settings => ({ inputMode: "hands", dwellMs: selection.dwellMs }), {
     name: "cadence-settings",
     storage: createJSONStorage(() => localStorage),
   }),
 );
+
+const fromUrl = new URLSearchParams(location.search).get("input");
+if (fromUrl === "hands" || fromUrl === "head" || fromUrl === "both") useSettings.setState({ inputMode: fromUrl });
 
 export const handsEnabled = (mode: InputMode) => mode !== "head";
 export const headEnabled = (mode: InputMode) => mode !== "hands";

@@ -51,9 +51,9 @@ export const layout = {
   recenterSettleMs: 300,
 } as const;
 
-/** Gesture → instant phraseId sent to the gateway. Palm-pinch is reserved by the Quest system; never map it. */
+/** Gesture → instant phrase sent to the gateway. Palm-pinch is reserved by the Quest system; never map it. */
 export const gesturePhrases = {
-  thumbsUp: "yes",
-  thumbsDown: "no",
-  openPalm: "wait",
+  thumbsUp: { phraseId: "yes", label: "instant.yes" },
+  thumbsDown: { phraseId: "no", label: "instant.no" },
+  openPalm: { phraseId: "wait", label: "instant.wait" },
 } as const;

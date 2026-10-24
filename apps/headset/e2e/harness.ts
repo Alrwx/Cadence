@@ -6,7 +6,8 @@ import type { XRStore } from "@react-three/xr";
 import type { XRDevice } from "iwer";
 import type { useHeadset } from "../src/session.ts";
 import type { useRecenter } from "../src/layout/UIAnchor.tsx";
-import type { useSettings } from "../src/settings.ts";
+import type { InputMode, useSettings } from "../src/settings.ts";
+import type { useView } from "../src/ui/views.ts";
 
 declare global {
   interface Window {
@@ -15,6 +16,7 @@ declare global {
       useHeadset: typeof useHeadset;
       useSettings: typeof useSettings;
       useRecenter: typeof useRecenter;
+      useView: typeof useView;
       xrStore: XRStore;
       emulator: XRDevice;
       targets: () => { label: string; center: Vec3 }[];
@@ -25,8 +27,8 @@ declare global {
 export type Vec3 = { x: number; y: number; z: number };
 
 /** Opens the app on its own mock-gateway session, enters emulated AR, and waits for the UI to settle in front of the head. */
-export async function enterAR(page: Page, session: string): Promise<void> {
-  await page.goto(`/headset/?session=${encodeURIComponent(session)}`);
+export async function enterAR(page: Page, session: string, input: InputMode = "hands"): Promise<void> {
+  await page.goto(`/headset/?session=${encodeURIComponent(session)}&input=${input}`);
   await page.waitForFunction(() => window.cadence?.store.getState().connection === "open");
   await page.getByRole("button", { name: "Enter", exact: true }).click();
   await page.waitForFunction(() => !!window.cadence.xrStore.getState().session);

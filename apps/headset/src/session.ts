@@ -23,13 +23,15 @@ export interface SentEvent {
 }
 
 interface HeadsetState {
-  /** Text of the last reply the user spoke, so it can be bookmarked as a saved phrase. */
+  /** Text of the last reply or typed message the user spoke, so it can be bookmarked as a saved phrase. */
   lastSpoken: string | null;
+  /** What the user last chose to say, shown while the phone speaks it. */
+  speaking: string | null;
   /** Recent outgoing events, for the debug views and end-to-end tests. */
   sent: SentEvent[];
 }
 
-export const useHeadset = create<HeadsetState>(() => ({ lastSpoken: null, sent: [] }));
+export const useHeadset = create<HeadsetState>(() => ({ lastSpoken: null, speaking: null, sent: [] }));
 
 const MAX_SENT = 50;
 
@@ -38,6 +40,7 @@ export function send<T extends EventType>(type: T, data: EventDataMap[T], turnId
   useHeadset.setState((s) => ({ sent: [...s.sent, { type, data, at: Date.now(), delivered }].slice(-MAX_SENT) }));
 }
 
-export function rememberSpoken(text: string): void {
-  useHeadset.setState({ lastSpoken: text });
+/** Records a choice to speak; only replies and typed messages are worth bookmarking. */
+export function rememberSpeech(text: string, bookmarkable: boolean): void {
+  useHeadset.setState((s) => ({ speaking: text, lastSpoken: bookmarkable ? text : s.lastSpoken }));
 }

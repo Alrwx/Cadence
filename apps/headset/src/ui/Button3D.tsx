@@ -1,7 +1,7 @@
 // A large pinch/poke target with a text label. Hands, controllers, and the desktop emulator press it by
 // pointer; the head pointer presses it after a dwell.
 import { RoundedBox, Text } from "@react-three/drei";
-import { useEffect, useId, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 import type { Mesh } from "three";
 import { layout } from "../config.ts";
 import { dwellTargets, useHeadHover } from "../selection/targets.ts";
@@ -17,6 +17,8 @@ interface Props {
   disabled?: boolean;
   /** False for buttons that could lock a hands-free user out (e.g. switching to hands-only input). */
   headSelectable?: boolean;
+  /** Extra marks drawn on the button face, positioned from its center. */
+  children?: ReactNode;
 }
 
 export function Button3D({
@@ -28,6 +30,7 @@ export function Button3D({
   color = "#2b5d9c",
   disabled = false,
   headSelectable = true,
+  children,
 }: Props) {
   const id = useId();
   const mesh = useRef<Mesh>(null);
@@ -92,6 +95,7 @@ export function Button3D({
       >
         {label}
       </Text>
+      {children}
     </group>
   );
 }
