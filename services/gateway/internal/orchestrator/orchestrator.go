@@ -18,7 +18,7 @@ import (
 	"github.com/Alrwx/Cadence/services/gateway/internal/store"
 )
 
-// defaultVoiceID is used until voice profiles and consent are wired up.
+// defaultVoiceID is used until the person records a voice on the phone (POST /api/voices).
 const defaultVoiceID = "default"
 
 type Orchestrator struct {
@@ -26,11 +26,12 @@ type Orchestrator struct {
 	models *models.Client
 	clips  *clips.Cache
 
-	// Single-user for now: every session belongs to this person and speaks in this voice.
-	// TODO(Dev 4): take both from the session once profiles and the consent flow exist.
+	// Single-user for now: every session belongs to this person.
 	personID string
 	locale   string
-	voiceID  string
+
+	voiceMu sync.RWMutex
+	voiceID string // model service voiceId every clip is synthesized in; changed by SetVoice
 
 	mu    sync.Mutex
 	state map[string]*sessionState
@@ -38,10 +39,12 @@ type Orchestrator struct {
 	flightMu sync.Mutex
 	inflight map[string]*flight // clip-cache key -> synthesis in progress
 	warming  atomic.Bool
+	rewarm   atomic.Bool // a warm-up was requested while one was running (e.g. the voice changed)
 }
 
 type sessionState struct {
 	mu          sync.Mutex
+	hub         *hub.Session // set on connect, so a voice change can refresh this session's phrases
 	machine     *session.Machine
 	turnID      string
 	turnSeq     int
@@ -66,14 +69,61 @@ func New(st *store.Store, mc *models.Client, cc *clips.Cache, personID, locale s
 func (o *Orchestrator) OnConnect(s *hub.Session, role hub.Role) {
 	ss := o.session(s.ID)
 	ss.mu.Lock()
+	ss.hub = s
 	state, turnID := ss.machine.State(), ss.turnID
 	ss.mu.Unlock()
 	ctx := context.Background()
 	_ = s.Send(ctx, role, protocol.TypeState, turnID, protocol.StateData{State: string(state)})
 	if role == hub.Headset {
 		o.sendPhrases(ctx, s)
-		go o.warmClips(s)
+		go o.warmClips()
 	}
+}
+
+// voice is the model service voiceId clips are synthesized in.
+func (o *Orchestrator) voice() string {
+	o.voiceMu.RLock()
+	defer o.voiceMu.RUnlock()
+	return o.voiceID
+}
+
+// SetVoice switches every session to a newly cloned voice. Clips are cached per voice, so the headset's
+// phrases show as not ready until warmClips has synthesized them in the new voice.
+func (o *Orchestrator) SetVoice(voiceID string) {
+	o.voiceMu.Lock()
+	changed := o.voiceID != voiceID
+	o.voiceID = voiceID
+	o.voiceMu.Unlock()
+	if !changed {
+		return
+	}
+	sessions := o.hubSessions()
+	ctx := context.Background()
+	for _, s := range sessions {
+		o.sendPhrases(ctx, s)
+	}
+	if len(sessions) > 0 {
+		go o.warmClips()
+	}
+}
+
+// hubSessions lists the sessions that have connected at least once.
+func (o *Orchestrator) hubSessions() []*hub.Session {
+	o.mu.Lock()
+	states := make([]*sessionState, 0, len(o.state))
+	for _, ss := range o.state {
+		states = append(states, ss)
+	}
+	o.mu.Unlock()
+	var out []*hub.Session
+	for _, ss := range states {
+		ss.mu.Lock()
+		if ss.hub != nil {
+			out = append(out, ss.hub)
+		}
+		ss.mu.Unlock()
+	}
+	return out
 }
 
 // OnAudio forwards phone mic frames to the model service's STT stream; transcripts come back through readSTT.

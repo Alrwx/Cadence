@@ -1,0 +1,69 @@
+package models
+
+import (
+	"context"
+	"io"
+	"net/http"
+	"net/http/httptest"
+	"strings"
+	"testing"
+)
+
+func TestCreateVoiceSendsMultipart(t *testing.T) {
+	var got struct {
+		consentID, transcript, fileName, contentType, audio string
+		hasTranscript                                       bool
+	}
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost || r.URL.Path != "/voices" {
+			http.NotFound(w, r)
+			return
+		}
+		if err := r.ParseMultipartForm(1 << 20); err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		got.consentID = r.FormValue("consentId")
+		_, got.hasTranscript = r.MultipartForm.Value["transcript"]
+		got.transcript = r.FormValue("transcript")
+		file, header, err := r.FormFile("audio")
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		body, _ := io.ReadAll(file)
+		got.audio, got.fileName, got.contentType = string(body), header.Filename, header.Header.Get("Content-Type")
+		_, _ = w.Write([]byte(`{"voiceId":"mlx_1"}`))
+	}))
+	defer srv.Close()
+	c := New(srv.URL)
+
+	id, err := c.CreateVoice(context.Background(), VoiceSample{Data: []byte("RIFF"), FileName: "sample.webm", ContentType: "audio/webm"}, "consent_1")
+	if err != nil || id != "mlx_1" {
+		t.Fatalf("CreateVoice = %q, %v", id, err)
+	}
+	if got.consentID != "consent_1" || got.audio != "RIFF" || got.fileName != "sample.webm" || got.contentType != "audio/webm" {
+		t.Fatalf("model service got %+v", got)
+	}
+	if got.hasTranscript {
+		t.Fatal("an empty transcript must be left out so the model service transcribes the sample")
+	}
+
+	if _, err := c.CreateVoice(context.Background(), VoiceSample{Data: []byte("x"), FileName: "a.m4a", Transcript: "Hello there"}, "consent_1"); err != nil {
+		t.Fatal(err)
+	}
+	if got.transcript != "Hello there" {
+		t.Fatalf("transcript = %q", got.transcript)
+	}
+}
+
+func TestCreateVoiceReportsModelErrors(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Error(w, "ffmpeg failed", http.StatusUnprocessableEntity)
+	}))
+	defer srv.Close()
+	_, err := New(srv.URL).CreateVoice(context.Background(), VoiceSample{Data: []byte("x"), FileName: "a.webm"}, "consent_1")
+	if err == nil || !strings.Contains(err.Error(), "422") || !strings.Contains(err.Error(), "ffmpeg failed") {
+		t.Fatalf("err = %v", err)
+	}
+}

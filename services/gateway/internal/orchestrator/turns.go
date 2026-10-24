@@ -242,6 +242,6 @@ func (o *Orchestrator) prepareSuggestion(s *hub.Session, ss *sessionState, turnI
 
 // clipReady reports whether text already has a playable clip in the current voice.
 func (o *Orchestrator) clipReady(ctx context.Context, text, locale string) bool {
-	id, ok, err := o.store.ClipID(ctx, o.voiceID, locale, text)
+	id, ok, err := o.store.ClipID(ctx, o.voice(), locale, text)
 	return err == nil && ok && o.clips.Has(id)
 }
