@@ -3,26 +3,49 @@ import { createCadenceStore, GatewayConnection, sessionIdFromUrl, type CadenceSt
 import { t } from "@cadence/shared/i18n";
 import { useEffect, useState } from "react";
 import { useStore } from "zustand";
+import { createStore } from "zustand/vanilla";
 import { PhoneAudio } from "./audio.ts";
 import { keepScreenOn } from "./wakeLock.ts";
 
 const store = createCadenceStore();
 const useCadence = <T,>(select: (s: CadenceState) => T): T => useStore(store, select);
 
+/** The clip actually coming out of the speaker; the shared store's nowPlaying is just the latest audio.play. */
+const playback = createStore<{ playing: AudioPlayData | null; error: string | null }>()(() => ({
+  playing: null,
+  error: null,
+}));
+
 /** Created inside the Start tap; null until then, so nothing can ever play before the user taps. */
 let audio: PhoneAudio | null = null;
+const heldClips: AudioPlayData[] = [];
+const unsentDone: string[] = [];
+
+const errorMessage = (err: unknown): string => (err instanceof Error ? err.message : String(err));
 
 function playClip(clip: AudioPlayData): void {
   if (!audio) {
-    // No tap yet, so playing isn't allowed. Report done anyway so the gateway doesn't wait in SPEAKING.
-    console.warn("audio.play before Start; not playing", clip.clipId);
-    connection.send("audio.done", { clipId: clip.clipId });
+    heldClips.push(clip);
     return;
   }
   audio
-    .enqueue(clip.url)
-    .catch((err) => console.error("playback failed", err))
-    .finally(() => connection.send("audio.done", { clipId: clip.clipId }));
+    .enqueue(clip.url, () => playback.setState({ playing: clip }))
+    .then(
+      () => playback.setState({ error: null }),
+      (err) => {
+        console.error("playback failed", err);
+        playback.setState({ error: errorMessage(err) });
+      },
+    )
+    .finally(() => {
+      if (playback.getState().playing === clip) playback.setState({ playing: null });
+      reportDone(clip.clipId);
+    });
+}
+
+// The gateway stays in SPEAKING until it gets audio.done, so one lost while offline is sent on reconnect.
+function reportDone(clipId: string): void {
+  if (!connection.send("audio.done", { clipId })) unsentDone.push(clipId);
 }
 
 const connection = new GatewayConnection({
@@ -33,9 +56,10 @@ const connection = new GatewayConnection({
     if (event.type === "audio.play") playClip(event.data);
   },
   onStatus: (status) => store.getState().setConnection(status),
-  // The gateway forgets the unlock when the connection drops; tell it again on every reconnect.
+  // A restarted gateway is back in IDLE and needs the unlock again; otherwise it ignores the repeat.
   onOpen: () => {
     if (audio) connection.send("phone.unlock", {});
+    unsentDone.splice(0).forEach(reportDone);
   },
 });
 
@@ -51,13 +75,15 @@ export function App() {
   const start = async () => {
     // Everything that needs a user gesture happens synchronously inside this tap.
     audio ??= new PhoneAudio();
+    heldClips.splice(0).forEach(playClip);
     keepScreenOn();
     setStarted(true);
     connection.send("phone.unlock", {}); // if the socket isn't open yet, onOpen sends it
+    const onMicError = (err: unknown) => setMicError(errorMessage(err));
     try {
-      await audio.startMic((frame) => connection.sendAudio(frame));
+      await audio.startMic((frame) => connection.sendAudio(frame), onMicError);
     } catch (err) {
-      setMicError(err instanceof Error ? err.message : String(err));
+      onMicError(err);
     }
   };
 
@@ -77,7 +103,8 @@ function Main({ micError }: { micError: string | null }) {
   const status = useCadence((s) => s.connection);
   const captions = useCadence((s) => s.captions);
   const partial = useCadence((s) => s.partial);
-  const nowPlaying = useCadence((s) => s.nowPlaying);
+  const playing = useStore(playback, (s) => s.playing);
+  const playError = useStore(playback, (s) => s.error);
 
   const answering = state === "CHOOSING" || state === "COMPOSING";
   return (
@@ -85,9 +112,10 @@ function Main({ micError }: { micError: string | null }) {
       <div className={`status ${status}`}>
         {t(`status.${status}`)}
         {micError && <div className="error">{t("phone.micError", { error: micError })}</div>}
+        {playError && <div className="error">{t("phone.playError", { error: playError })}</div>}
       </div>
       {answering && <div className="ring">{t("phone.answering")}</div>}
-      {state === "SPEAKING" && nowPlaying && <div className="speaking">“{nowPlaying.text}”</div>}
+      {playing && <div className="speaking">“{playing.text}”</div>}
       <div className="captions">
         {captions.slice(-4).map((c, i) => (
           <div key={i}>{c}</div>

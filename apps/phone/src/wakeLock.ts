@@ -2,18 +2,23 @@
 // The browser drops the lock whenever the page is hidden, so it's re-requested when the page is visible again.
 
 let sentinel: WakeLockSentinel | null = null;
+let requesting = false;
 let wanted = false;
 
 async function acquire(): Promise<void> {
-  if (!wanted || sentinel || !("wakeLock" in navigator) || document.visibilityState !== "visible") return;
+  if (!wanted || sentinel || requesting || !("wakeLock" in navigator) || document.visibilityState !== "visible") return;
+  requesting = true;
   try {
-    sentinel = await navigator.wakeLock.request("screen");
-    sentinel.addEventListener("release", () => {
-      sentinel = null;
+    const lock = await navigator.wakeLock.request("screen");
+    lock.addEventListener("release", () => {
+      if (sentinel === lock) sentinel = null;
     });
+    sentinel = lock;
   } catch (err) {
     // Unsupported, low battery, or not allowed; the app still works, the screen may just dim.
     console.warn("wake lock unavailable", err);
+  } finally {
+    requesting = false;
   }
 }
 
