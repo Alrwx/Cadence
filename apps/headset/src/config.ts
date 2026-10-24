@@ -1,12 +1,20 @@
 // Every tunable for gestures and layout lives here (AGENTS(GH).md §7, Dev 1 agent notes).
 
+// Reach = fingertip-to-wrist distance in palm lengths (wrist to middle knuckle).
+// classify.test.ts checks these against IWER's captured hand poses.
 export const gestures = {
-  /** A finger counts as curled when its tip is closer than this to the wrist (meters). */
-  curledTipToWrist: 0.09,
-  /** A finger counts as extended when its tip is farther than this from the wrist (meters). */
-  extendedTipToWrist: 0.13,
-  /** Thumb tip must be this far above (thumbs-up) or below (thumbs-down) the wrist (meters). */
-  thumbVertical: 0.04,
+  /** A finger is curled below this reach. */
+  curledReach: 0.85,
+  /** A finger is extended above this reach. */
+  extendedReach: 1.5,
+  /** The thumb sticks out (thumbs-up/down) above this reach. */
+  thumbOutReach: 1.25,
+  /** Open palm needs thumb and index tips at least this far apart (palm lengths), so a pinch never counts. */
+  minPinchGap: 0.5,
+  /** Cosine of the max angle between "up" and the thumb (thumbs-up/down) or the fingers (open palm). */
+  pointingCos: 0.7,
+  /** Cosine of the max angle between the palm and the direction away from the head (open palm). */
+  palmAwayCos: 0.5,
   /** A pose must be held this long before it fires (ms). */
   holdMs: 400,
   /** After a gesture fires, ignore gestures for this long (ms). */
