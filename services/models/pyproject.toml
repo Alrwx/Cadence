@@ -16,6 +16,15 @@ mlx = [
     "mlx-lm; sys_platform == 'darwin'",
     "mlx-audio; sys_platform == 'darwin'",
 ]
+# RTX 3080 server (MODELS_BACKEND=cuda). torch 2.8 is the newest release with a prebuilt flash-attn 2.8.3 wheel;
+# cu126 runs on the Debian trixie driver (550, CUDA 12.4) via CUDA minor-version compatibility.
+cuda = [
+    "torch==2.8.0; sys_platform == 'linux'",
+    "torchaudio==2.8.0; sys_platform == 'linux'",
+    "qwen-tts==0.1.1; sys_platform == 'linux'",
+    "soundfile>=0.13.1; sys_platform == 'linux'",
+    "flash-attn @ https://github.com/Dao-AILab/flash-attention/releases/download/v2.8.3.post2/flash_attn-2.8.3.post2+cu12torch2.8cxx11abiTRUE-cp312-cp312-linux_x86_64.whl ; sys_platform == 'linux' and platform_machine == 'x86_64' and python_version == '3.12'",
+]
 
 [dependency-groups]
 dev = [
@@ -23,6 +32,15 @@ dev = [
     "pytest>=9.1.1",
     "ruff>=0.14.0",
 ]
+
+[tool.uv.sources]
+torch = { index = "pytorch-cu126", marker = "sys_platform == 'linux'" }
+torchaudio = { index = "pytorch-cu126", marker = "sys_platform == 'linux'" }
+
+[[tool.uv.index]]
+name = "pytorch-cu126"
+url = "https://download.pytorch.org/whl/cu126"
+explicit = true
 
 [tool.pytest.ini_options]
 pythonpath = ["."]
