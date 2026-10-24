@@ -46,10 +46,13 @@ interface Session {
   clipTexts: Map<string, string>;
   groups: PhrasesGroup[];
   timers: NodeJS.Timeout[];
+  /** The disconnect scenario drops connections once; clients re-send phone.unlock on reconnect. */
+  droppedOnce: boolean;
 }
 
 const sessions = new Map<string, Session>();
 let clipCounter = 0;
+let idCounter = 0;
 
 function getSession(id: string): Session {
   let s = sessions.get(id);
@@ -67,11 +70,19 @@ function getSession(id: string): Session {
             { id: "ph_water", text: "I need some water", icon: "water", audioReady: true },
             { id: "ph_restroom", text: "I need to use the restroom", audioReady: true },
             { id: "ph_pain", text: "I'm in pain", audioReady: true },
+            { id: "ph_family", text: "Can you call my family?", audioReady: true },
           ],
+        },
+        // Starter groups match AGENTS(GH).md; "Demo" opens the judge demo.
+        {
+          id: "pg_demo",
+          name: "Demo",
+          items: [{ id: "ph_judges", text: "Hi judges, I'll be demoing Cadence", audioReady: true }],
         },
         { id: "pg_home", name: "Home", items: [{ id: "ph_love", text: "I love you", audioReady: true }] },
       ],
       timers: [],
+      droppedOnce: false,
     };
     sessions.set(id, s);
   }
@@ -92,7 +103,8 @@ function runScenario(s: Session): void {
     at += step.afterMs;
     s.timers.push(setTimeout(() => send(s, step.to, step.type, step.data), at));
   }
-  if (scenario.disconnectAfterMs !== undefined) {
+  if (scenario.disconnectAfterMs !== undefined && !s.droppedOnce) {
+    s.droppedOnce = true;
     s.timers.push(
       setTimeout(() => {
         console.log("scenario: dropping all connections");
@@ -135,10 +147,30 @@ function handle(s: Session, event: CadenceEvent): void {
     }
     case "phrase.save": {
       const group = s.groups.find((g) => g.id === event.data.groupId);
-      group?.items.push({ id: `ph_${Date.now()}`, text: event.data.text, audioReady: true });
+      if (!group) {
+        send(s, "headset", "error", { code: "unknown_group", message: "That group no longer exists.", recoverable: true });
+        break;
+      }
+      group.items.push({ id: `ph_${++idCounter}`, text: event.data.text, audioReady: true });
       send(s, "headset", "phrases", { groups: s.groups });
       break;
     }
+    case "phrase.group.save": {
+      const { groupId, name, order } = event.data;
+      let group = s.groups.find((g) => g.id === groupId);
+      if (group) group.name = name;
+      else s.groups.push((group = { id: groupId ?? `pg_${++idCounter}`, name, items: [] }));
+      if (order !== undefined) {
+        s.groups = s.groups.filter((g) => g !== group);
+        s.groups.splice(Math.max(0, Math.min(order, s.groups.length)), 0, group);
+      }
+      send(s, "headset", "phrases", { groups: s.groups });
+      break;
+    }
+    case "phrase.group.delete":
+      s.groups = s.groups.filter((g) => g.id !== event.data.groupId);
+      send(s, "headset", "phrases", { groups: s.groups });
+      break;
     case "phrase.delete":
       for (const g of s.groups) g.items = g.items.filter((p) => p.id !== event.data.phraseId);
       send(s, "headset", "phrases", { groups: s.groups });
