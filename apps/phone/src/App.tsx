@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 import { useStore } from "zustand";
 import { createStore } from "zustand/vanilla";
 import { PhoneAudio } from "./audio.ts";
+import { VoiceSetup } from "./VoiceSetup.tsx";
 import { keepScreenOn } from "./wakeLock.ts";
 
 const store = createCadenceStore();
@@ -65,6 +66,7 @@ const connection = new GatewayConnection({
 
 export function App() {
   const [started, setStarted] = useState(false);
+  const [settingUpVoice, setSettingUpVoice] = useState(false);
   const [micError, setMicError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -87,11 +89,18 @@ export function App() {
     }
   };
 
+  // Voice setup lives before Start, so the sample isn't also streamed to speech-to-text.
+  if (settingUpVoice) return <VoiceSetup onClose={() => setSettingUpVoice(false)} />;
   if (!started) {
     return (
       <div className="start">
-        <button onClick={start}>{t("phone.start")}</button>
+        <button className="big" onClick={start}>
+          {t("phone.start")}
+        </button>
         <p className="hint">{t("phone.startHint")}</p>
+        <button className="secondary" onClick={() => setSettingUpVoice(true)}>
+          {t("phone.setupVoice")}
+        </button>
       </div>
     );
   }
