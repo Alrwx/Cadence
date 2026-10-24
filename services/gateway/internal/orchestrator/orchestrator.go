@@ -44,7 +44,15 @@ type sessionState struct {
 	mu          sync.Mutex
 	machine     *session.Machine
 	turnID      string
+	turnSeq     int
 	suggestions map[string]string // suggestion id -> text, for the current turn
+	history     []models.Turn
+	cancelTurn  context.CancelFunc // cancels the in-flight /suggest for the current turn
+
+	// The speech-to-text stream is managed separately because opening it can block on a dial.
+	sttMu       sync.Mutex
+	stt         *models.STTStream
+	sttFailedAt time.Time
 }
 
 func New(st *store.Store, mc *models.Client, cc *clips.Cache, personID, locale string) *Orchestrator {
@@ -58,19 +66,26 @@ func New(st *store.Store, mc *models.Client, cc *clips.Cache, personID, locale s
 func (o *Orchestrator) OnConnect(s *hub.Session, role hub.Role) {
 	ss := o.session(s.ID)
 	ss.mu.Lock()
-	state := ss.machine.State()
+	state, turnID := ss.machine.State(), ss.turnID
 	ss.mu.Unlock()
 	ctx := context.Background()
-	_ = s.Send(ctx, role, protocol.TypeState, ss.turnID, protocol.StateData{State: string(state)})
+	_ = s.Send(ctx, role, protocol.TypeState, turnID, protocol.StateData{State: string(state)})
 	if role == hub.Headset {
 		o.sendPhrases(ctx, s)
 		go o.warmClips(s)
 	}
 }
 
+// OnAudio forwards phone mic frames to the model service's STT stream; transcripts come back through readSTT.
 func (o *Orchestrator) OnAudio(s *hub.Session, frame []byte) {
-	// TODO(Dev 4): forward frames to the model service's WS /stt, broadcast transcript.partial/final,
-	// debounce partials (~400 ms) and speculatively call /suggest and /tts for the top 3.
+	ss := o.session(s.ID)
+	stream := o.sttStream(s, ss)
+	if stream == nil {
+		return
+	}
+	if err := stream.Send(frame); err != nil {
+		o.endSTT(s, ss, stream)
+	}
 }
 
 func (o *Orchestrator) OnEvent(s *hub.Session, from hub.Role, env protocol.Envelope) {
@@ -88,6 +103,7 @@ func (o *Orchestrator) OnEvent(s *hub.Session, from hub.Role, env protocol.Envel
 
 	switch d := data.(type) {
 	case *protocol.PhoneUnlockData:
+		o.resetSTTBackoff(ss) // the user tapped Start: retry the model service right away
 		o.apply(ctx, s, ss, session.Start)
 	case *protocol.ComposeStartData:
 		o.apply(ctx, s, ss, session.ComposeStart)
@@ -140,7 +156,11 @@ func (o *Orchestrator) speak(ctx context.Context, s *hub.Session, ss *sessionSta
 	if err := o.store.LogUtterance(s.ID, clipID, text, source, time.Now().UnixMilli()); err != nil {
 		slog.Error("audit log", "session", s.ID, "err", err)
 	}
-	_ = s.Send(ctx, hub.Phone, protocol.TypeAudioPlay, ss.turnID, protocol.AudioPlayData{
+	ss.mu.Lock()
+	ss.addTurnLocked("user", text)
+	turnID := ss.turnID
+	ss.mu.Unlock()
+	_ = s.Send(ctx, hub.Phone, protocol.TypeAudioPlay, turnID, protocol.AudioPlayData{
 		ClipID: clipID, URL: "/clips/" + clipID + ".wav", Text: text, Source: source,
 	})
 }
@@ -150,6 +170,9 @@ func (o *Orchestrator) apply(ctx context.Context, s *hub.Session, ss *sessionSta
 	ss.mu.Lock()
 	next, err := ss.machine.Apply(in)
 	turnID := ss.turnID
+	if err == nil && (in == session.Speak || in == session.ComposeStart || in == session.Cancel) {
+		ss.endTurnLocked()
+	}
 	ss.mu.Unlock()
 	if err != nil {
 		slog.Info("ignored input", "session", s.ID, "err", err)
