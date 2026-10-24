@@ -18,8 +18,20 @@ body,
 
 .start {
   display: grid;
-  place-items: center;
+  place-content: center;
+  justify-items: center;
+  gap: 1.5rem;
   min-height: 100dvh;
+  padding: 0 1rem;
+  box-sizing: border-box;
+  text-align: center;
+}
+
+.hint {
+  color: var(--muted);
+  font-size: 1.1rem;
+  max-width: 20rem;
+  margin: 0;
 }
 
 .start button {
@@ -43,6 +55,11 @@ body,
 .status {
   color: var(--muted);
   font-size: 0.9rem;
+}
+
+.status.closed,
+.status .error {
+  color: #f0a35e;
 }
 
 .ring {

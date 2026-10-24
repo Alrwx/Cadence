@@ -17,6 +17,8 @@ export interface ConnectionOptions {
   clientVersion?: string;
   onEvent: (event: CadenceEvent) => void;
   onStatus?: (status: ConnectionStatus) => void;
+  /** Runs after `hello` on every connect and reconnect, e.g. to re-send state the gateway lost (phone.unlock). */
+  onOpen?: () => void;
 }
 
 const MIN_BACKOFF_MS = 500;
@@ -40,21 +42,29 @@ export class GatewayConnection {
   constructor(private readonly opts: ConnectionOptions) {}
 
   connect(): void {
+    if (this.ws) return; // already connecting or open
+    clearTimeout(this.retryTimer);
     this.closedByUser = false;
     this.opts.onStatus?.("connecting");
     const ws = new WebSocket(this.opts.url ?? gatewayUrl(this.opts.role, this.opts.sessionId));
     ws.binaryType = "arraybuffer";
+    // Handlers check `this.ws === ws` so a socket we already replaced or closed can't touch the current one
+    // (React StrictMode connects, closes, and connects again on mount).
     ws.onopen = () => {
+      if (this.ws !== ws) return;
       this.attempt = 0;
-      this.opts.onStatus?.("open");
+      // hello goes first so the gateway knows who we are before anything else arrives.
       this.send("hello", { role: this.opts.role, clientVersion: this.opts.clientVersion ?? "0.1.0" });
+      this.opts.onStatus?.("open");
+      this.opts.onOpen?.();
     };
     ws.onmessage = (msg) => {
-      if (typeof msg.data !== "string") return;
+      if (this.ws !== ws || typeof msg.data !== "string") return;
       const event = parse(msg.data);
       if (event) this.opts.onEvent(event);
     };
     ws.onclose = () => {
+      if (this.ws !== ws) return;
       this.ws = null;
       this.opts.onStatus?.("closed");
       if (!this.closedByUser) this.retryTimer = setTimeout(() => this.connect(), nextBackoff(this.attempt++));
@@ -78,7 +88,10 @@ export class GatewayConnection {
   close(): void {
     this.closedByUser = true;
     clearTimeout(this.retryTimer);
-    this.ws?.close();
+    const ws = this.ws;
+    this.ws = null;
+    ws?.close();
+    if (ws) this.opts.onStatus?.("closed");
   }
 }
 
