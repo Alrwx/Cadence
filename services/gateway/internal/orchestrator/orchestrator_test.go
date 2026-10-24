@@ -188,6 +188,68 @@ func TestSavedPhrasesEndToEnd(t *testing.T) {
 	}
 }
 
+// TestPhoneClientReconnects plays the phone client the way apps/phone does: hello first on every open,
+// phone.unlock and any unsent audio.done re-sent after a reconnect, and one audio.play per spoken utterance.
+// Events go over the phone's socket only, so the gateway handles them in order and "next state" is meaningful.
+func TestPhoneClientReconnects(t *testing.T) {
+	fm := &fakeModels{}
+	o := newTestOrchestrator(t, fm)
+	srv := httptest.NewServer(hub.New(o))
+	t.Cleanup(srv.Close)
+
+	open := func() *client {
+		phone := dial(t, srv.URL, "phone")
+		phone.send(protocol.TypeHello, protocol.HelloData{Role: "phone", ClientVersion: "0.1.0"})
+		return phone
+	}
+	var state protocol.StateData
+	nextState := func(c *client, want string) {
+		t.Helper()
+		c.expect(protocol.TypeState, &state, nil)
+		if state.State != want {
+			t.Fatalf("next state = %s, want %s", state.State, want)
+		}
+	}
+	sayYes := func(c *client) protocol.AudioPlayData {
+		t.Helper()
+		c.send(protocol.TypeInstant, protocol.InstantData{PhraseID: "yes"})
+		nextState(c, "SPEAKING")
+		var play protocol.AudioPlayData
+		c.expect(protocol.TypeAudioPlay, &play, nil)
+		c.send(protocol.TypeAudioDone, protocol.AudioDoneData{ClipID: play.ClipID})
+		nextState(c, "LISTENING")
+		return play
+	}
+
+	phone := open()
+	nextState(phone, "IDLE")
+	phone.send(protocol.TypePhoneUnlock, protocol.PhoneUnlockData{})
+	nextState(phone, "LISTENING")
+	// A repeated unlock is ignored: the next state change comes from the instant phrase.
+	phone.send(protocol.TypePhoneUnlock, protocol.PhoneUnlockData{})
+
+	// Saying "Yes" twice reuses one clip, so the phone must play by event, not by clip id.
+	first, second := sayYes(phone), sayYes(phone)
+	if first.ClipID != second.ClipID || first.Text != "Yes" || first.Source != "instant" {
+		t.Fatalf("audio.play = %+v then %+v, want the same cached clip", first, second)
+	}
+	if n := fm.ttsCalls.Load(); n != 1 {
+		t.Fatalf("%d TTS calls for one phrase, want 1", n)
+	}
+
+	// After a reconnect: state on connect, then the re-sent unlock and a stale audio.done change nothing.
+	phone.conn.CloseNow()
+	phone = open()
+	nextState(phone, "LISTENING")
+	phone.send(protocol.TypePhoneUnlock, protocol.PhoneUnlockData{})
+	phone.send(protocol.TypeAudioDone, protocol.AudioDoneData{ClipID: first.ClipID})
+	phone.send(protocol.TypeComposeStart, protocol.ComposeStartData{})
+	nextState(phone, "COMPOSING")
+	phone.send(protocol.TypeCancel, protocol.CancelData{})
+	nextState(phone, "LISTENING")
+	sayYes(phone)
+}
+
 func TestClipForSharesConcurrentSynthesis(t *testing.T) {
 	fm := &fakeModels{delay: 100 * time.Millisecond}
 	o := newTestOrchestrator(t, fm)
