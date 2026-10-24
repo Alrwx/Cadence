@@ -5,5 +5,6 @@
   "phone.start": "Start",
   "phone.startHint": "Tap Start to turn on the microphone and the speaker.",
   "phone.answering": "I'm answering…",
-  "phone.micError": "Microphone unavailable: {error}"
+  "phone.micError": "Microphone unavailable: {error}",
+  "phone.playError": "Couldn't play a message: {error}"
 }
