@@ -138,3 +138,32 @@ test("hello goes out before onStatus/onOpen, and onOpen runs again after a recon
   ]);
   conn.close();
 });
+
+test("connect, close, connect (React StrictMode) leaves exactly one live socket", (t) => {
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  const realWs = globalThis.WebSocket;
+  globalThis.WebSocket = FakeSocket as unknown as typeof WebSocket;
+  t.after(() => {
+    globalThis.WebSocket = realWs;
+  });
+  const statuses: string[] = [];
+  const conn = new GatewayConnection({
+    role: "phone",
+    sessionId: "s",
+    url: "wss://test/ws",
+    onEvent: () => {},
+    onStatus: (status) => statuses.push(status),
+  });
+  const before = FakeSocket.instances.length;
+  conn.connect();
+  conn.close();
+  conn.connect();
+  conn.connect(); // second call while connecting is a no-op
+  const live = FakeSocket.instances.at(-1)!;
+  live.open();
+  t.mock.timers.tick(10_000); // a stray retry would create another socket here
+  assert.equal(FakeSocket.instances.length - before, 2);
+  assert.equal(statuses.at(-1), "open");
+  assert.equal(live.sent.length, 1, "only hello");
+  conn.close();
+});
