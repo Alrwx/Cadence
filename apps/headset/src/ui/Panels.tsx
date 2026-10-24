@@ -2,6 +2,7 @@
 import { Text } from "@react-three/drei";
 import { useEffect } from "react";
 import { layout } from "../config.ts";
+import { requestPlaceListener, useListener } from "../layout/ListenerAnchor.tsx";
 import { requestRecenter, useRecenter } from "../layout/UIAnchor.tsx";
 import { useCadence, useHeadset } from "../session.ts";
 import { t } from "../strings.ts";
@@ -41,6 +42,7 @@ export function Panels() {
   return (
     <group position={layout.panelOffset} rotation={[PANEL_TILT, 0, 0]}>
       <StatusLine />
+      {showTopBar && <ListenerPrompt />}
       {showTopBar && (
         <>
           <Button3D label={t("top.recenter")} width={0.14} height={0.045} color={QUIET} position={[-0.4, 0.27, 0]} onPress={requestRecenter} />
@@ -78,6 +80,21 @@ export function Panels() {
   );
 }
 
+/** Asked once per page load; the top bar's gap above keeps a dwell on Recenter or Settings from landing here. */
+function ListenerPrompt() {
+  const prompted = useListener((s) => s.prompted);
+  if (prompted) return null;
+  return (
+    <group position={[0, 0.36, 0]}>
+      <Text position={[-0.12, 0, 0]} fontSize={0.02} anchorX="right" color="#ddd">
+        {t("listener.prompt")}
+      </Text>
+      <Button3D label={t("listener.place")} width={0.2} height={0.045} color="#2e6b7d" position={[0, 0, 0]} onPress={requestPlaceListener} />
+      <Button3D label={t("listener.skip")} width={0.12} height={0.045} color={QUIET} position={[0.18, 0, 0]} onPress={() => useListener.setState({ prompted: true })} />
+    </group>
+  );
+}
+
 function StatusLine() {
   const state = useCadence((s) => s.state);
   const partial = useCadence((s) => s.partial);
@@ -85,9 +102,11 @@ function StatusLine() {
   const speaking = useHeadset((s) => s.speaking);
   const recentering = useRecenter((s) => s.announced);
   const notice = useView((s) => s.notice);
+  const placing = useListener((s) => s.at !== null);
 
   let text: string;
   if (recentering) text = t("status.recentering");
+  else if (placing) text = t("listener.placing");
   else if (notice) text = notice.text;
   else if (state === "SPEAKING" && speaking) text = t("status.speaking", { text: speaking });
   else if (partial || caption) text = partial || caption;

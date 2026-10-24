@@ -4,6 +4,7 @@ import { Text } from "@react-three/drei";
 import { useEffect, useState } from "react";
 import { layout, selection } from "../config.ts";
 import { useConsent } from "../consent.ts";
+import { clearListener, requestPlaceListener, useListener } from "../layout/ListenerAnchor.tsx";
 import { send } from "../session.ts";
 import { useSettings, type InputMode } from "../settings.ts";
 import { t, type StringKey } from "../strings.ts";
@@ -53,7 +54,8 @@ export function SettingsPanel({ onClose }: { onClose: () => void }) {
         />
       ))}
       <MemoriesRow y={-2 * row} />
-      <Button3D label={t("settings.done")} width={0.2} color="#2b5d9c" position={[0, -3 * row, 0]} onPress={onClose} />
+      <ListenerRow y={-3 * row} />
+      <Button3D label={t("settings.done")} width={0.2} color="#2b5d9c" position={[0, -4 * row, 0]} onPress={onClose} />
     </group>
   );
 }
@@ -93,6 +95,20 @@ function MemoriesRow({ y }: { y: number }) {
           send("consent.set", { kind: "store_chat", granted: false });
         }}
       />
+    </>
+  );
+}
+
+/** Where the reply bubbles float; placing stays on this view, so the head can turn to the listener freely. */
+function ListenerRow({ y }: { y: number }) {
+  const placed = useListener((s) => s.spot !== null);
+  return (
+    <>
+      <Text position={[LABEL_X, y, 0]} fontSize={layout.fontSize} anchorX="left" color="white">
+        {t("listener.setting")}
+      </Text>
+      <Button3D label={t("listener.placeShort")} width={0.12} color={placed ? ACTIVE : IDLE} position={[-0.14, y, 0]} onPress={requestPlaceListener} />
+      <Button3D label={t("listener.clear")} width={0.16} color={IDLE} disabled={!placed} position={[0.01, y, 0]} onPress={clearListener} />
     </>
   );
 }

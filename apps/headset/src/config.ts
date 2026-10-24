@@ -51,6 +51,9 @@ export const layout = {
   recenterCountdownMs: 2500,
   /** Head poses settle for this long after entering AR or a system recenter before the UI follows (ms). */
   recenterSettleMs: 300,
+  /** Reply bubbles stack this far from the user (meters) and this far to the right of the listener's face (degrees). */
+  listenerDistance: 1,
+  listenerSideDeg: 12,
 } as const;
 
 /** Gesture → instant phrase sent to the gateway. Palm-pinch is reserved by the Quest system; never map it. */
