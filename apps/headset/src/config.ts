@@ -21,6 +21,19 @@ export const gestures = {
   cooldownMs: 1500,
 } as const;
 
+/** Hands-free selection: hold the head reticle on a target. */
+export const selection = {
+  /** Default dwell time; users can change it in Settings (ms). */
+  dwellMs: 800,
+  dwellChoicesMs: [600, 800, 1200, 1600],
+  /** A near miss within this angle still counts as pointing at the target (degrees). */
+  snapDeg: 3,
+  /** Turning the head faster than this restarts the dwell (degrees per second). */
+  maxHeadSpeedDegPerSec: 60,
+  /** The reticle floats this far in front of the eyes (meters). */
+  reticleDistance: 0.8,
+} as const;
+
 export const layout = {
   /** Panels sit at chest/lap height to reduce arm fatigue; y is meters above the floor. */
   panelPosition: [0, 1.1, -0.55] as [number, number, number],

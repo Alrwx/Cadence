@@ -6,6 +6,7 @@ import { gesturePhrases } from "../config.ts";
 import { debugEnabled } from "../dev/debug.ts";
 import { recordFrame } from "../dev/handRecorder.ts";
 import { send } from "../session.ts";
+import { handsEnabled, useSettings } from "../settings.ts";
 import {
   classify,
   GestureDebouncer,
@@ -47,7 +48,7 @@ export function HandGestures() {
       let debouncer = debouncers.current.get(source.handedness);
       if (!debouncer) debouncers.current.set(source.handedness, (debouncer = new GestureDebouncer()));
       const fired = debouncer.update(gesture, now);
-      if (fired) fireGesture(fired);
+      if (fired && handsEnabled(useSettings.getState().inputMode)) fireGesture(fired);
       if (debugEnabled && hand) {
         recordFrame(source.handedness, hand);
         readout[source.handedness] = { gesture, measures: measure(hand) };

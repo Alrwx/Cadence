@@ -4,17 +4,26 @@ import { useState } from "react";
 import { layout } from "../config.ts";
 import { rememberSpoken, send, useCadence, useHeadset } from "../session.ts";
 import { Button3D } from "./Button3D.tsx";
+import { SettingsPanel } from "./SettingsPanel.tsx";
 
 const ROW = layout.buttonHeight + 0.015;
 
 export function Panels() {
   const state = useCadence((s) => s.state);
+  const [settingsOpen, setSettingsOpen] = useState(false);
   return (
     <group position={layout.panelPosition} rotation={[layout.panelTilt, 0, 0]}>
       <StatusLine />
-      {state === "COMPOSING" ? <ComposeBoard /> : <Replies />}
-      <InstantRow />
-      <SavedPhrases />
+      {settingsOpen ? (
+        <SettingsPanel onClose={() => setSettingsOpen(false)} />
+      ) : (
+        <>
+          <Button3D label="Settings" width={0.14} height={0.045} color="#3d4a5c" position={[0.45, 0.2, 0]} onPress={() => setSettingsOpen(true)} />
+          {state === "COMPOSING" ? <ComposeBoard /> : <Replies />}
+          <InstantRow />
+          <SavedPhrases />
+        </>
+      )}
     </group>
   );
 }
