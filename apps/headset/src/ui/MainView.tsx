@@ -11,11 +11,10 @@ import { t } from "../strings.ts";
 import { Button3D } from "./Button3D.tsx";
 import { remember } from "./ConsentView.tsx";
 import { Replies } from "./ListenerReplies.tsx";
-import { notify, showView, startCompose, useView } from "./views.ts";
+import { notify, NOTICE_MS, showView, startCompose, useView } from "./views.ts";
 
 const INSTANT_Y = -0.01;
 const SAVED_Y = -0.105;
-const UNDO_MS = 5000;
 
 export function MainView() {
   const listenerPlaced = useListener((s) => s.spot !== null);
@@ -82,13 +81,13 @@ function RememberButton() {
   useEffect(() => {
     if (!justSaved) return;
     notify(t("memories.remembered", { summary: justSaved.summary }));
-    const timer = setTimeout(() => useMemories.setState({ justSaved: null }), UNDO_MS);
+    // Undo lasts as long as the announcement, so it never shows without saying what it would undo.
+    const timer = setTimeout(() => useMemories.setState({ justSaved: null }), NOTICE_MS);
     return () => clearTimeout(timer);
   }, [justSaved]);
-  // Leaving the main view ends the chance to undo, so coming back doesn't announce it again.
-  useEffect(() => () => useMemories.setState({ justSaved: null }), []);
+  // Leaving the main view ends the chance to undo, so a memory that arrives meanwhile isn't announced on return.
+  useEffect(() => () => useMemories.setState({ justSaved: null, awaiting: false }), []);
 
-  // One button, not two: a new button under a resting head starts a new dwell, which would press Undo by itself.
   return (
     <Button3D
       label={justSaved ? t("memories.undo") : t("memories.remember")}

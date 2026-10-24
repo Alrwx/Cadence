@@ -44,8 +44,10 @@ export function HandGestures() {
     if (!frame || !refSpace || !head) return;
     const now = performance.now();
     const readout: HandReadout["hands"] = {};
+    const tracked = new Set<XRHandedness>();
     for (const source of frame.session.inputSources) {
       if (!source.hand) continue;
+      tracked.add(source.handedness);
       const hand = readHand(frame, source.hand, refSpace, head);
       const gesture = hand ? classify(hand) : null;
       let debouncer = debouncers.current.get(source.handedness);
@@ -57,6 +59,8 @@ export function HandGestures() {
         readout[source.handedness] = { gesture, measures: measure(hand) };
       }
     }
+    // A hand that lost tracking must hold its pose afresh when it comes back.
+    for (const [handedness, debouncer] of debouncers.current) if (!tracked.has(handedness)) debouncer.update(null, now);
     if (debugEnabled && now - lastReadout.current > READOUT_INTERVAL_MS) {
       lastReadout.current = now;
       useHandReadout.setState({ hands: readout });

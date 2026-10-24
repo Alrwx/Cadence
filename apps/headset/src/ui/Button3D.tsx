@@ -37,7 +37,6 @@ export function Button3D({
   const [pointerHover, setPointerHover] = useState(false);
   const headHover = useHeadHover((s) => s.id === id);
   const lastPress = useRef(0);
-  const pinchedBy = useRef<number | null>(null);
   const latest = useRef({ onPress, disabled, headSelectable });
   latest.current = { onPress, disabled, headSelectable };
 
@@ -71,10 +70,10 @@ export function Button3D({
         radius={0.012}
         // Not onClick: pointer-events only clicks when the release comes within 300 ms, so a slow pinch
         // (common after a stroke) would never press. A release on the button that was pinched always does.
-        onPointerDown={(e) => (pinchedBy.current = e.pointerId)}
+        onPointerDown={(e) => void pinchedOn.set(e.pointerId, id)}
         onPointerUp={(e) => {
-          if (pinchedBy.current !== e.pointerId) return;
-          pinchedBy.current = null;
+          if (pinchedOn.get(e.pointerId) !== id) return;
+          pinchedOn.delete(e.pointerId);
           if (handsEnabled(useSettings.getState().inputMode)) press();
         }}
         onPointerOver={() => setPointerHover(true)}
@@ -101,3 +100,6 @@ export function Button3D({
 }
 
 const ignoreRays = () => {};
+
+// Shared across buttons, so a pinch that started on one button and was released elsewhere can't later press it.
+const pinchedOn = new Map<number, string>();

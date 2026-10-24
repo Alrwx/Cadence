@@ -19,6 +19,7 @@ export function HeadPointer() {
 function Reticle() {
   const { camera, scene } = useThree();
   const tracker = useRef(new DwellTracker());
+  const lastIds = useRef(new Set<string>());
   const fill = useRef<Mesh>(null);
 
   // The reticle is a child of the camera so it moves with the head in the same frame; the camera has to be
@@ -42,11 +43,16 @@ function Reticle() {
     const rects: [string, Rect][] = [];
     for (const [id, target] of dwellTargets) if (target.selectable()) rects.push([id, rectOf(target)]);
     const hover = pickTarget(origin, dir, rects, selection.snapDeg * DEG);
+    const appeared = hover !== null && !lastIds.current.has(hover);
+    lastIds.current = new Set(rects.map(([id]) => id));
     const { dwellMs } = useSettings.getState();
-    const update = tracker.current.update(hover, dir, performance.now(), {
-      dwellMs,
-      maxHeadSpeed: selection.maxHeadSpeedDegPerSec * DEG,
-    });
+    const update = tracker.current.update(
+      hover,
+      dir,
+      performance.now(),
+      { dwellMs, maxHeadSpeed: selection.maxHeadSpeedDegPerSec * DEG },
+      appeared,
+    );
     if (useHeadHover.getState().id !== update.hover) useHeadHover.setState({ id: update.hover });
     if (update.fired) dwellTargets.get(update.fired)?.press();
     fill.current?.scale.setScalar(Math.max(update.progress, 1e-3));
