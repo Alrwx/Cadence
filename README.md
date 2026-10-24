@@ -1,19 +1,22 @@
 # Cadence
 
-Assistive communication for people who can't speak or struggle to speak (stroke/aphasia, laryngectomy, vocal-cord paralysis). The user wears a **Meta Quest 3S** in passthrough, so they still see the room and the person they're talking to. A phone between them picks up what the other person says, an on-device model suggests three short replies, the user picks one with their hands, and the phone speaks it **in the user's own cloned voice**.
+Assistive communication for people who can't speak or struggle to speak (stroke/aphasia, laryngectomy, vocal-cord paralysis). The user wears a **Meta Quest 3S** in passthrough, so they still see the room and the person they're talking to. A phone between them picks up what the other person says, an on-device model suggests three short replies, the user picks one with their hands or just their head, and the phone speaks it **in the user's own cloned voice**.
 
 Reply options float beside the listener, so the user keeps eye contact instead of looking down at a screen. The phone shows an "I'm answering" indicator so silence isn't mistaken for "done."
 
 ## Features
 
 - **Suggested replies.** Three short replies that fit the conversation and the user's style, picked with a pinch or poke.
+- **Hands-free selection.** For users who can't pinch reliably, holding a center-of-view reticle on any reply or button for a moment selects it, with no hands needed.
 - **Instant gestures.** Thumbs-up says "Yes", thumbs-down says "No", open palm says "Give me a second", all in under a second.
 - **Type my own.** A large word board or keyboard in XR, always one action away.
-- **Voice cloning with consent.** The voice is cloned from a few seconds of old audio (a voicemail or home video) only after a consent record is stored. Revoking consent deletes the voice.
-- **Saved phrases (bookmarks).** Users save phrases they say often, grouped by context, and play them in one action without waiting for suggestions. A patient in a hospital might keep "I need some water" and "I need to use the restroom" ready for when the nurse comes in. Phrases can be typed in or bookmarked right after they're spoken, and each one is synthesized once when it's saved so it plays instantly.
+- **Voice cloning with consent.** The voice is cloned from a few seconds of old audio (a voicemail or home video) or a ~30-second sample recorded on the phone, only after a consent record is stored. Revoking consent deletes the voice.
+- **Saved phrases (bookmarks).** Users save phrases they say often, grouped by context, and play them in one action without waiting for suggestions. New users start with a "Hospital" group ("I need some water", "I need to use the restroom", ...) ready for when the nurse comes in. Phrases can be typed in or bookmarked right after they're spoken, and each one is synthesized once when it's saved so it plays instantly.
 - **Saved conversations (stretch goal).** Users can save a conversation, such as a doctor's appointment, with a label and attach it to a later conversation. A summary of it is passed to the suggestion model, so suggestions on the next visit remember what was discussed. Saving is opt-in per conversation, needs chat-storage consent, and saved conversations can be deleted at any time.
+- **Quick memories (stretch goal).** "Remember this" summarizes the last minute of conversation into a short note that later suggestions use automatically. Needs chat-storage consent; memories can be deleted at any time.
+- **Pointing at objects (stretch goal).** Look at an object in the room and get suggestions about it ("Can you hand me the water?"). Blocked until we can get camera frames in Quest Browser.
 
-Everything runs locally on the demo laptop. Conversations, transcripts, and voices never leave it by default.
+Everything runs locally on the demo laptop. Conversations, transcripts, and voices never leave it by default. The demo is English-only, but language is a setting passed through speech-to-text, suggestions, and TTS, so other languages can be added later.
 
 ## How it works
 
