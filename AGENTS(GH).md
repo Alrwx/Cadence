@@ -34,7 +34,7 @@ Users can **bookmark phrases** they say often, grouped by context, so they're on
 ### Saved conversations (stretch goal)
 Users can **save a conversation** (e.g. a doctor's appointment) and reference it in later conversations, so the next visit's suggestions know what was discussed ("Did the new medication help?" → a reply that remembers which medication).
 - **Opt-in per conversation:** requires `store_chat` consent *and* an explicit "Save this conversation" action with a label (e.g. "Dr. Lee – Oct 24"). Nothing is saved by default.
-- Saved conversations are browsable (transcript + optional short summary) and **deletable at any time**; deletion removes transcript, summary, and any derived context.
+- **Only the AI summary is stored**, never the transcript. Saved conversations are browsable by label and summary and **deletable at any time**; deletion removes the summary and any derived context.
 - At the start of a conversation the user can attach one or more saved conversations as context; the gateway passes a summary of them to `/suggest`.
 - Local-only like everything else; never sent to a remote API.
 
@@ -328,7 +328,7 @@ Each role lists **scope**, **owned paths**, **done means**, and **notes for your
 - SQLite schema and migrations: `person` (with `locale`), `voice_profile` (with `locale`), `consent`, `phrase_clip`, `phrase_group`, `saved_phrase` (with `locale`), `contact`, `session`, `turn` (content only with `store_chat` consent), `audit_log`, `metric`. Stretch: `saved_conversation` (label, session ref, summary), `memory` (summary, created_at).
 - Saved phrases: CRUD over the `phrase.*` events, synthesize a clip via `/tts` on save (and re-synthesize when the voice changes), serve them like instant clips. A new person starts with a "Hospital" group ("I need some water", "I need to use the restroom", "I'm in pain", "Can you call my family?") and a "Demo" group ("Hi judges, I'll be demoing Cadence").
 - Voice upload: accept the phone's sample and forward it to `POST /voices` with the consent ID.
-- *(Stretch)* Saved conversations: persist the session's turns on `conversation.save` (only with `store_chat`), call `/summarize`, pass attached summaries to `/suggest`; deleting a conversation or revoking `store_chat` deletes all of it.
+- *(Stretch)* Saved conversations: on `conversation.save` (only with `store_chat`), send the session's turns to `/summarize` and store **only the label and summary** in `saved_conversation`; the transcript itself is never written to disk for it. Pass attached summaries to `/suggest`; deleting a conversation or revoking `store_chat` deletes all of it.
 - *(Stretch)* Quick memories: keep a rolling ~60 s transcript in memory, summarize it on `memory.save` (only with `store_chat`), pass the most recent memories to `/suggest`; revoking `store_chat` deletes them all.
 - Consent flow endpoints and revoke-deletes-everything behavior.
 - `packages/protocol`: schemas, generation scripts (TS + Go), examples, and contract tests.
