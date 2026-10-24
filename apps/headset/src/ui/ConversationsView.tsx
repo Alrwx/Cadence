@@ -11,8 +11,6 @@ import { showView } from "./views.ts";
 // Typing a label in XR is slow, so a save is one press: a preset plus today's date.
 const PAGE_SIZE = 3;
 const SUMMARY_CHARS = 70;
-/** A delete needs a second press within this window (ms); it can't be undone. */
-const CONFIRM_MS = 4000;
 const LABEL_X = -0.47;
 const IDLE = "#3d4a5c";
 
@@ -28,7 +26,7 @@ export function ConversationsView() {
 
   useEffect(() => {
     if (!confirming) return;
-    const timer = setTimeout(() => setConfirming(null), CONFIRM_MS);
+    const timer = setTimeout(() => setConfirming(null), layout.confirmMs);
     return () => clearTimeout(timer);
   }, [confirming]);
 

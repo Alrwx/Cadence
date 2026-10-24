@@ -2,7 +2,12 @@
 import { create } from "zustand";
 import { send } from "../session.ts";
 
-export type View = { kind: "main" } | { kind: "saved" } | { kind: "conversations" } | { kind: "settings" };
+export type View =
+  | { kind: "main" }
+  | { kind: "saved" }
+  | { kind: "conversations"; tab?: "memories" }
+  | { kind: "consent" }
+  | { kind: "settings" };
 
 export interface Notice {
   text: string;

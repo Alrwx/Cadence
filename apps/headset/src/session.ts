@@ -3,7 +3,9 @@ import { createCadenceStore, GatewayConnection, sessionIdFromUrl } from "@cadenc
 import type { CadenceState } from "@cadence/shared";
 import type { EventDataMap, EventType } from "@cadence/protocol";
 import { create, useStore } from "zustand";
+import { useConsent } from "./consent.ts";
 import { receiveConversations } from "./conversations.ts";
+import { receiveMemories } from "./memories.ts";
 
 export const store = createCadenceStore();
 
@@ -13,6 +15,8 @@ export const connection = new GatewayConnection({
   onEvent: (event) => {
     store.getState().applyEvent(event);
     if (event.type === "conversations") receiveConversations(event.data.items);
+    if (event.type === "memories") receiveMemories(event.data.items);
+    if (event.type === "consent") useConsent.setState({ storeChat: event.data.storeChat });
   },
   onStatus: (status) => store.getState().setConnection(status),
 });

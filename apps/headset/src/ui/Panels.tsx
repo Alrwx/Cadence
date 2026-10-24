@@ -6,8 +6,10 @@ import { requestRecenter, useRecenter } from "../layout/UIAnchor.tsx";
 import { useCadence, useHeadset } from "../session.ts";
 import { t } from "../strings.ts";
 import { Button3D } from "./Button3D.tsx";
+import { ConsentView } from "./ConsentView.tsx";
 import { ConversationsView } from "./ConversationsView.tsx";
 import { MainView } from "./MainView.tsx";
+import { MemoriesView } from "./MemoriesView.tsx";
 import { SavedPhrasesView } from "./SavedPhrasesView.tsx";
 import { SettingsPanel } from "./SettingsPanel.tsx";
 import { TextEntryView } from "./TextEntryView.tsx";
@@ -16,6 +18,7 @@ import { notify, showView, useView } from "./views.ts";
 // Tilted back so the panel faces the eyes from below the line of sight.
 const PANEL_TILT = Math.atan2(layout.panelOffset[1], -layout.panelOffset[2]);
 const QUIET = "#3d4a5c";
+const ACTIVE = "#b07a1f";
 
 export function Panels() {
   const sessionState = useCadence((s) => s.state);
@@ -29,7 +32,8 @@ export function Panels() {
   let content;
   if (sessionState === "COMPOSING") content = <TextEntryView />;
   else if (view.kind === "saved") content = <SavedPhrasesView />;
-  else if (view.kind === "conversations") content = <ConversationsView />;
+  else if (view.kind === "conversations") content = view.tab === "memories" ? <MemoriesView /> : <ConversationsView />;
+  else if (view.kind === "consent") content = <ConsentView />;
   else if (view.kind === "settings") content = <SettingsPanel onClose={() => showView({ kind: "main" })} />;
   else content = <MainView />;
 
@@ -44,10 +48,21 @@ export function Panels() {
             label={t("top.conversations")}
             width={0.2}
             height={0.045}
-            color={QUIET}
+            color={view.kind === "conversations" && !view.tab ? ACTIVE : QUIET}
             position={[0, 0.27, 0]}
             onPress={() => showView({ kind: "conversations" })}
           />
+          {/* Beside Conversations, not splitting its spot, so a dwell that just opened it can't land on Memories. */}
+          {view.kind === "conversations" && (
+            <Button3D
+              label={t("memories.tab")}
+              width={0.16}
+              height={0.045}
+              color={view.tab === "memories" ? ACTIVE : QUIET}
+              position={[0.2, 0.27, 0]}
+              onPress={() => showView({ kind: "conversations", tab: "memories" })}
+            />
+          )}
           <Button3D
             label={t("top.settings")}
             width={0.14}

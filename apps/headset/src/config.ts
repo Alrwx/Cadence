@@ -42,6 +42,8 @@ export const layout = {
   fontSize: 0.022,
   /** Ignore repeat presses on the same button within this window (ms). */
   pressDebounceMs: 600,
+  /** A press that deletes something needs a second press within this window (ms). */
+  confirmMs: 4000,
   /** The ?debug panel floats to the user's left, turned toward them (meters from the head; radians). */
   debugPanelOffset: [-0.6, -0.1, -0.45] as [number, number, number],
   debugPanelYaw: 0.6,
