@@ -1,0 +1,9 @@
+{
+  "status.connecting": "Connecting…",
+  "status.open": "Connected",
+  "status.closed": "Reconnecting…",
+  "phone.start": "Start",
+  "phone.startHint": "Tap Start to turn on the microphone and the speaker.",
+  "phone.answering": "I'm answering…",
+  "phone.micError": "Microphone unavailable: {error}"
+}
