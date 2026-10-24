@@ -9,6 +9,8 @@ import { Button3D } from "./Button3D.tsx";
 import { showView } from "./views.ts";
 
 const PAGE_SIZE = 4;
+// Two lines at most, so a long summary can't spill into the next row.
+const SUMMARY_CHARS = 110;
 const LABEL_X = -0.47;
 const IDLE = "#3d4a5c";
 
@@ -34,7 +36,7 @@ export function MemoriesView() {
       {items.slice(shown * PAGE_SIZE, (shown + 1) * PAGE_SIZE).map((m, i) => (
         <group key={m.id} position={[0, -(0.9 + i) * row, 0]}>
           <Text position={[LABEL_X, 0, 0]} fontSize={0.018} maxWidth={0.72} anchorX="left" color="white">
-            {m.summary}
+            {m.summary.length > SUMMARY_CHARS ? `${m.summary.slice(0, SUMMARY_CHARS)}…` : m.summary}
           </Text>
           <Button3D
             label={confirming === m.id ? t("memories.confirmDelete") : t("memories.delete")}
