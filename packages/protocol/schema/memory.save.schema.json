@@ -1,0 +1,10 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "memory.save",
+  "description": "(Stretch) Remember the last ~60 s as a short memory; rejected without store_chat consent.",
+  "x-direction": "headset → gateway",
+  "type": "object",
+  "properties": {},
+  "required": [],
+  "additionalProperties": false
+}

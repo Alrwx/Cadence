@@ -1,0 +1,23 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "consent.set",
+  "description": "(Stretch) Grant or revoke a consent; revoking store_chat deletes every memory.",
+  "x-direction": "headset → gateway",
+  "type": "object",
+  "properties": {
+    "kind": {
+      "type": "string",
+      "enum": [
+        "store_chat"
+      ]
+    },
+    "granted": {
+      "type": "boolean"
+    }
+  },
+  "required": [
+    "kind",
+    "granted"
+  ],
+  "additionalProperties": false
+}

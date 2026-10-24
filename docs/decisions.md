@@ -23,3 +23,8 @@ Append-only. One entry per decision: date, decision, why, who.
 **Decision:** Added to `AGENTS(GH).md` and the README: hands-free head-dwell selection and voice-sample recording on the phone (core, M3); starter saved-phrase groups, including the demo greeting; a clip cache keyed by voice, locale, and text; `locale` plumbing through the model service; quick memories and pointing at objects (stretch, M5). Contract changes are additive optional fields.
 **Why:** These came out of the earlier glasses design and still fit the Quest 3S version. Head selection covers users who can't pinch; pointing at objects stays blocked until a spike gets camera frames out of Quest Browser.
 **Who:** David
+
+### 2026-10-24 – store_chat consent is set from the headset over the WebSocket
+**Decision:** Added `consent.set { kind: "store_chat", granted }` (headset → gw) and `consent { storeChat }` (gw → headset, on connect and after any change). The headset asks for it the first time "Remember this" is pressed, and Settings can turn it off (which deletes every memory). Voice consent stays on the phone's `POST /api/consent`.
+**Why:** `store_chat` is a setting the headset needs to read back to decide whether to prompt; the voice consent is a one-off signed statement tied to an upload.
+**Who:** David

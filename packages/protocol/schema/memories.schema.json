@@ -1,0 +1,36 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "memories",
+  "description": "(Stretch) Quick memories, newest first; sent on connect and after any change.",
+  "x-direction": "gateway → headset",
+  "type": "object",
+  "properties": {
+    "items": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "summary": {
+            "type": "string"
+          },
+          "createdAt": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "summary",
+          "createdAt"
+        ],
+        "additionalProperties": false
+      }
+    }
+  },
+  "required": [
+    "items"
+  ],
+  "additionalProperties": false
+}

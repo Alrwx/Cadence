@@ -1,0 +1,10 @@
+{
+  "type": "consent",
+  "v": 1,
+  "sessionId": "s_123",
+  "turnId": "t_7",
+  "ts": 1729740007500,
+  "data": {
+    "storeChat": true
+  }
+}

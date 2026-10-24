@@ -247,6 +247,8 @@ Every JSON event has this envelope:
 | `memory.save` | headset → gw | `{}` (summarize the last ~60 s; rejected with `error` unless `store_chat` consent exists) |
 | `memories` | gw → headset | `{ items: [{ id, summary, createdAt }] }` (sent on connect and after any change) |
 | `memory.delete` | headset → gw | `{ memoryId }` |
+| `consent.set` | headset → gw | `{ kind: "store_chat", granted }` (revoking deletes every memory) |
+| `consent` | gw → headset | `{ storeChat }` (sent on connect and after any change) |
 
 Hands-free selection needs no new events: a dwell selection sends the same `select` / `instant` / `phrase.speak` as a pinch. Events for pointing at objects get defined after the camera spike.
 
@@ -327,7 +329,7 @@ Each role lists **scope**, **owned paths**, **done means**, and **notes for your
 - Saved phrases: CRUD over the `phrase.*` events, synthesize a clip via `/tts` on save (and re-synthesize when the voice changes), serve them like instant clips. A new person starts with a "Hospital" group ("I need some water", "I need to use the restroom", "I'm in pain", "Can you call my family?") and a "Demo" group ("Hi judges, I'll be demoing Cadence").
 - Voice upload: accept the phone's sample and forward it to `POST /voices` with the consent ID.
 - *(Stretch)* Saved conversations: persist the session's turns on `conversation.save` (only with `store_chat`), call `/summarize`, pass attached summaries to `/suggest`; deleting a conversation or revoking `store_chat` deletes all of it.
-- *(Stretch)* Quick memories: keep a rolling ~60 s transcript in memory, summarize it on `memory.save` (only with `store_chat`), pass the most recent memories to `/suggest`; revoking `store_chat` deletes them all.
+- *(Stretch)* Quick memories: keep a rolling ~60 s transcript in memory, summarize it on `memory.save` (only with `store_chat`), pass memories to `/suggest` by keyword (at most 5 that share a content word with the last 3 turns, best match first, ties to the newer; none if nothing matches); revoking `store_chat` deletes them all.
 - Consent flow endpoints and revoke-deletes-everything behavior.
 - `packages/protocol`: schemas, generation scripts (TS + Go), examples, and contract tests.
 - Root `Makefile`: `make dev` (all services with mocks toggles), `make demo`, `make test`.

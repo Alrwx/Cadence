@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "consent",
+  "description": "(Stretch) Current consents; sent on connect and after any change.",
+  "x-direction": "gateway → headset",
+  "type": "object",
+  "properties": {
+    "storeChat": {
+      "type": "boolean"
+    }
+  },
+  "required": [
+    "storeChat"
+  ],
+  "additionalProperties": false
+}
