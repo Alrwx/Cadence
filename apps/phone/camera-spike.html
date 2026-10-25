@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Cadence – Camera spike</title>
+    <!-- Dev server only (not in the build). Phase 0 of docs/proposals/2026-10-25-pointing-at-objects.md. -->
+    <style>
+      body {
+        margin: 0;
+        padding: 1.5rem;
+        background: #101418;
+        color: #f2f4f6;
+        font:
+          1.2rem system-ui,
+          sans-serif;
+      }
+      button {
+        font: inherit;
+        padding: 0.8rem 1.2rem;
+        margin: 0 0.5rem 0.5rem 0;
+        border-radius: 0.6rem;
+      }
+      video,
+      img {
+        max-width: 48%;
+        margin: 0.5rem 0.5rem 0 0;
+        vertical-align: top;
+      }
+      pre {
+        white-space: pre-wrap;
+        font-size: 1rem;
+        color: #9aa5b1;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Camera spike</h1>
+    <p>Run the steps in order on the Quest. Results also print in the mock gateway's terminal on step 4.</p>
+    <button id="list">1. List cameras</button>
+    <select id="cameras"></select>
+    <button id="open">2. Open camera</button>
+    <button id="ar">3. Test in AR (8 s)</button>
+    <button id="upload">4. Upload crop</button>
+    <div><video id="video" muted playsinline></video><img id="crop" alt="" /></div>
+    <pre id="out"></pre>
+    <script type="module" src="/src/spike/cameraSpike.ts"></script>
+  </body>
+</html>
