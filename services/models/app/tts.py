@@ -11,6 +11,7 @@
 import json
 import logging
 import queue
+import re
 import shutil
 import threading
 import time
@@ -33,6 +34,8 @@ DEFAULT_VOICE = "default"
 MIN_SPEECH_S = 3.0  # less than this and the clone sounds like no one in particular
 MAX_REFERENCE_S = 15.0
 MAX_TRANSCRIBED_S = 28.0  # Whisper sees 30 s at a time
+# Long text is spoken as chunks about one reply long, so no generation runs longer than a batch of suggestions.
+MAX_CHUNK_CHARS = 120
 
 
 class UnknownVoice(KeyError):
@@ -59,6 +62,28 @@ def max_tokens(texts: list[str]) -> int:
     Sampling occasionally fails to stop; this bounds a runaway generation to a few seconds over the expected length.
     """
     return int(12 * (3 + max(len(t) for t in texts) / 6))
+
+
+def split_text(text: str) -> list[str]:
+    """Splits text at sentence ends (then at spaces) into chunks of at most MAX_CHUNK_CHARS, packing short ones."""
+    pieces = []
+    for sentence in re.split(r"(?<=[.!?])\s+", text.strip()):
+        line = ""
+        for word in sentence.split():
+            if line and len(line) + 1 + len(word) > MAX_CHUNK_CHARS:
+                pieces.append(line)
+                line = word
+            else:
+                line = f"{line} {word}" if line else word
+        if line:
+            pieces.append(line)
+    chunks: list[str] = []
+    for piece in pieces:
+        if chunks and len(chunks[-1]) + 1 + len(piece) <= MAX_CHUNK_CHARS:
+            chunks[-1] += " " + piece
+        else:
+            chunks.append(piece)
+    return chunks
 
 
 class TtsService:
@@ -131,9 +156,11 @@ class TtsService:
     def synthesize(self, voice_id: str, text: str, locale: str) -> bytes:
         if voice_id != DEFAULT_VOICE and not (_safe_id(voice_id) and (self.voices_dir / voice_id).is_dir()):
             raise UnknownVoice(voice_id)
-        job = _Synth(voice_id, language_name(locale), text)
-        self.jobs.put(job)
-        return to_wav(job.future.result(), self.engine.sample_rate)
+        language = language_name(locale)
+        jobs = [_Synth(voice_id, language, chunk) for chunk in split_text(text)]
+        for job in jobs:
+            self.jobs.put(job)
+        return to_wav(np.concatenate([job.future.result() for job in jobs]), self.engine.sample_rate)
 
     # --- worker thread ---
 
@@ -168,6 +195,8 @@ class TtsService:
             texts = [j.text for j in batch]
             start = time.perf_counter()
             wavs = self.engine.generate(prompt, texts, first.language, max_tokens(texts))
+            if len(wavs) != len(batch):
+                raise RuntimeError(f"the TTS engine returned {len(wavs)} clips for {len(batch)} texts")
             ms = round((time.perf_counter() - start) * 1000)
             log.info("tts voice=%s batch=%d ms=%d", first.voice_id, len(batch), ms)
         except Exception as e:  # noqa: BLE001  (every waiting request gets the error)

@@ -131,7 +131,7 @@ def create_app(models: Models, load: bool = True) -> FastAPI:
         ready.require("tts")
         start = time.perf_counter()
         try:
-            wav = models.tts.synthesize(req.voiceId, req.text.strip(), req.locale)
+            wav = models.tts.synthesize(req.voiceId, req.text, req.locale)
         except UnknownVoice as e:
             raise HTTPException(status_code=404, detail=f"unknown voiceId {req.voiceId}") from e
         ms = round((time.perf_counter() - start) * 1000)

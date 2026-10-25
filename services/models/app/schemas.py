@@ -1,8 +1,8 @@
 """Request/response types for §6.2. services/gateway/internal/models/client.go mirrors these by hand."""
 
-from typing import Literal
+from typing import Annotated, Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, StringConstraints
 
 Status = Literal["ready", "loading", "error"]
 ReplyKind = Literal["statement", "question", "yes_no"]
@@ -55,7 +55,7 @@ class SuggestResponse(BaseModel):
 
 class TtsRequest(BaseModel):
     voiceId: str
-    text: str = Field(min_length=1, max_length=400)
+    text: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1)]
     locale: str = "en"
 
 

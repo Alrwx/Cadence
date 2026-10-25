@@ -65,8 +65,14 @@ def test_tts_unknown_voice_is_404(client):
     assert client.post("/tts", json={"voiceId": "../etc", "text": "Yes"}).status_code == 404
 
 
-def test_tts_rejects_empty_text(client):
+def test_tts_rejects_empty_or_blank_text(client):
     assert client.post("/tts", json={"voiceId": "default", "text": ""}).status_code == 422
+    assert client.post("/tts", json={"voiceId": "default", "text": "  \n "}).status_code == 422
+
+
+def test_tts_speaks_a_long_typed_message(client):
+    text = " ".join(["I typed this whole sentence on the board."] * 25)
+    assert client.post("/tts", json={"voiceId": "default", "text": text}).status_code == 200
 
 
 def test_voice_without_transcript_is_transcribed(client, models, tmp_path):

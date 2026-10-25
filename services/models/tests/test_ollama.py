@@ -1,8 +1,10 @@
+import http.client
 import json
+import urllib.request
 
 import pytest
 
-from app.backends.ollama import OllamaError, OllamaSuggest
+from app.backends.ollama import OllamaError, OllamaSuggest, post_json
 from app.schemas import ContextItem, Style, Turn
 
 REPLIES = [
@@ -98,3 +100,13 @@ def test_summarize_is_plain_text_in_the_locale_language():
     assert out == "Dr. Lee wants a follow-up in two weeks."
     body = fake.bodies[0][1]
     assert "format" not in body and "French" in body["messages"][0]["content"]
+
+
+@pytest.mark.parametrize("dropped", [http.client.RemoteDisconnected("closed"), ConnectionResetError("reset")])
+def test_a_connection_dropped_mid_response_is_an_ollama_error(monkeypatch, dropped):
+    def urlopen(*args, **kwargs):
+        raise dropped
+
+    monkeypatch.setattr(urllib.request, "urlopen", urlopen)
+    with pytest.raises(OllamaError):
+        post_json("http://127.0.0.1:11434/api/chat", {}, 1.0)

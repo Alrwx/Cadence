@@ -5,6 +5,7 @@ The same backend runs on both machines: Ollama uses its MLX engine on the Mac an
 retry still guard against it.
 """
 
+import http.client
 import json
 import logging
 import urllib.error
@@ -37,8 +38,8 @@ def post_json(url: str, body: dict[str, Any], timeout: float) -> dict[str, Any]:
             return json.loads(resp.read())
     except urllib.error.HTTPError as e:
         raise OllamaError(f"{url}: {e.code} {e.read().decode(errors='replace')[:300]}") from e
-    except (urllib.error.URLError, TimeoutError) as e:
-        raise OllamaError(f"Ollama not reachable at {url}: {e}") from e
+    except (OSError, http.client.HTTPException) as e:  # URLError, timeouts, and connections dropped mid-response
+        raise OllamaError(f"Ollama request to {url} failed: {e}") from e
 
 
 def replies_schema(n: int) -> dict[str, Any]:
