@@ -154,6 +154,12 @@ IDLE → LISTENING ──(speech ends)──► SUGGESTING ──(suggestions re
 | TLS (remote fallback) | Cloudflare Tunnel + Cloudflare Access → home server | Only if the 3080 server is used |
 | Demo hardware | MacBook Pro M4 Pro, 24 GB + Quest 3S + phone + own hotspot | Do not rely on venue Wi-Fi |
 
+**Where the models run (decided 2026-10-24):**
+- **Until demo day:** all models run on Paolo's RTX 3080, so we test there. Gemma (Ollama) may spill to the CPU next to Qwen3-TTS and answer slowly. That's acceptable for testing, not for the demo.
+- **A couple of hours before the demo:** move Gemma to a rented RunPod RTX 4090 (24 GB). Use Secure Cloud (~$0.74/h) on the day; Community Cloud (~$0.34/h) is fine for rehearsals. Run Ollama with the same Gemma model on the pod and point the model service's `OLLAMA_URL` at it through an SSH tunnel (`ssh -L 11434:localhost:11434 <pod>`). Qwen3-TTS keeps the 3080 to itself, so Gemma neither spills to the CPU nor waits behind TTS. No code changes.
+- **Rehearse the switch once** before demo day (start the pod, pull the model, run the demo flow), because a fresh pod has to download the model. Stop the pod when you're done; it bills by the second.
+- The pod is a server we rent and control, but it's off the demo laptop. Running Gemma there is a deliberate exception to §2's local-first rule, for the demo only.
+
 **Unverified assumptions (verify early, record results in `docs/decisions.md`):**
 - mlx-audio's Qwen3-TTS port supports cloning with the 0.6B Base model at usable speed on the M4 Pro.
 - Gemma 4 E4B at 4-bit produces good 3-reply suggestions in < 1.5 s for short prompts.
