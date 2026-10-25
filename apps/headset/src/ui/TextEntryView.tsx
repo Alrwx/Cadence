@@ -9,15 +9,15 @@ import { GlassPanel } from "./GlassPanel.tsx";
 import { addWord, backspace, finish, typeKey } from "./textEntry.ts";
 import { useView } from "./views.ts";
 
-const FIELD_Y = 0.3;
+const FIELD_Y = 0.13;
 const FIELD_TEXT_X = -0.32;
-const ACTIONS_Y = -0.02;
+const ACTIONS_Y = -0.2;
 
 const LETTER_ROWS = ["qwertyuiop", "asdfghjkl'", "zxcvbnm,.?"];
-const LETTERS_TOP = 0.22;
+const LETTERS_TOP = 0.05;
 
 const WORDS_PER_ROW = 6;
-const WORDS_TOP = 0.215;
+const WORDS_TOP = 0.05;
 
 export function TextEntryView() {
   const [text, setText] = useState(() => useView.getState().draft);
