@@ -65,3 +65,10 @@ Gateway code is Dev 4's area; the PR needs Dev 4's review.
 - End to end with the real gateway binary + mock models: consent 201, upload with transcript 201, bad consent 403, restart keeps the voice.
 - Found: the model service requires `transcript`, so the phone's real upload fails with 502 until Dev 3 makes it optional.
 - Review fixes from David: `store_chat` consent no longer needs a voice owner; `/api` routes reject other web origins (same rule as `/ws`) and consent must be JSON.
+
+## 9. Later PRs (2026-10-24 to 2026-10-25)
+
+- **PR #13** merged (consent + voice upload routes).
+- **PR #20** `[phone]` saved-phrase management screen; the proposal `2026-10-24-phone-phrase-management.md` covers the gateway gaps.
+- **PRs #23, #26** `[phone]` desktop test bench: phone plus a clickable stand-in headset, type for the listener (`listener.say`), errors that clear themselves.
+- **PR #29** `[phone]` camera spike page for pointing at objects (phase 0), plus `docs/proposals/2026-10-25-pointing-at-objects.md` (#27).
