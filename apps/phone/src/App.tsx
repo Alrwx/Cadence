@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 import { useStore } from "zustand";
 import { createStore } from "zustand/vanilla";
 import { PhoneAudio } from "./audio.ts";
+import { PhraseManager } from "./PhraseManager.tsx";
 import { VoiceSetup } from "./VoiceSetup.tsx";
 import { keepScreenOn } from "./wakeLock.ts";
 
@@ -67,6 +68,7 @@ const connection = new GatewayConnection({
 export function App() {
   const [started, setStarted] = useState(false);
   const [settingUpVoice, setSettingUpVoice] = useState(false);
+  const [managingPhrases, setManagingPhrases] = useState(false);
   const [micError, setMicError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -91,6 +93,9 @@ export function App() {
 
   // Voice setup lives before Start, so the sample isn't also streamed to speech-to-text.
   if (settingUpVoice) return <VoiceSetup onClose={() => setSettingUpVoice(false)} />;
+  if (managingPhrases) {
+    return <PhraseManager store={store} connection={connection} onClose={() => setManagingPhrases(false)} />;
+  }
   if (!started) {
     return (
       <div className="start">
@@ -100,6 +105,9 @@ export function App() {
         <p className="hint">{t("phone.startHint")}</p>
         <button className="secondary" onClick={() => setSettingUpVoice(true)}>
           {t("phone.setupVoice")}
+        </button>
+        <button className="secondary" onClick={() => setManagingPhrases(true)}>
+          {t("phone.managePhrases")}
         </button>
       </div>
     );

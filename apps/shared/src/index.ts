@@ -1,4 +1,5 @@
 export * from "./connection.ts";
+export * from "./phrases.ts";
 export * from "./store.ts";
 export * from "./voiceApi.ts";
 
