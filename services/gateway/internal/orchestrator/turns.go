@@ -30,11 +30,30 @@ func (ss *sessionState) endTurnLocked() {
 	ss.suggestions = map[string]string{}
 }
 
+// heardTurn is a turn and when it was said, so "Remember this" can take just the last minute.
+type heardTurn struct {
+	models.Turn
+	At time.Time
+}
+
 func (ss *sessionState) addTurnLocked(speaker, text string) {
-	ss.history = append(ss.history, models.Turn{Speaker: speaker, Text: text})
+	ss.history = append(ss.history, heardTurn{models.Turn{Speaker: speaker, Text: text}, time.Now()})
 	if len(ss.history) > historyKept {
-		ss.history = append([]models.Turn(nil), ss.history[len(ss.history)-historyKept:]...)
+		ss.history = append([]heardTurn(nil), ss.history[len(ss.history)-historyKept:]...)
 	}
+}
+
+// turnsSince returns the kept turns said at or after since, oldest first.
+func (ss *sessionState) turnsSince(since time.Time) []heardTurn {
+	ss.mu.Lock()
+	defer ss.mu.Unlock()
+	var out []heardTurn
+	for _, t := range ss.history {
+		if !t.At.Before(since) {
+			out = append(out, t)
+		}
+	}
+	return out
 }
 
 // sttStream returns the session's open STT stream, dialing one if needed. After a failed dial it returns nil
@@ -131,28 +150,35 @@ func (o *Orchestrator) onFinal(s *hub.Session, ss *sessionState, text string) {
 	go o.suggest(turnCtx, s, ss, turnID, history)
 }
 
-// beginTurn moves LISTENING -> SUGGESTING under a new turn id and records what the other person said.
+// beginTurn records what the other person said and moves LISTENING -> SUGGESTING under a new turn id.
 func (o *Orchestrator) beginTurn(ss *sessionState, text string) (context.Context, string, []models.Turn, bool) {
 	ss.mu.Lock()
 	defer ss.mu.Unlock()
+	// Recorded even when no turn starts (the user is already choosing), so memories and the next turn see it.
+	ss.addTurnLocked("other", text)
 	if _, err := ss.machine.Apply(session.SpeechEnded); err != nil {
 		return nil, "", nil, false
 	}
 	ss.endTurnLocked()
 	ss.turnSeq++
 	ss.turnID = fmt.Sprintf("t_%d", ss.turnSeq)
-	ss.addTurnLocked("other", text)
 	ctx, cancel := context.WithCancel(context.Background())
 	ss.cancelTurn = cancel
 	recent := ss.history[max(0, len(ss.history)-historySent):]
-	return ctx, ss.turnID, append([]models.Turn(nil), recent...), true
+	history := make([]models.Turn, len(recent))
+	for i, t := range recent {
+		history[i] = t.Turn
+	}
+	return ctx, ss.turnID, history, true
 }
 
 // suggest asks the model service for replies and, if the turn is still current, shows them on the headset
 // and starts synthesizing them so the one that gets picked is usually ready to play.
 func (o *Orchestrator) suggest(ctx context.Context, s *hub.Session, ss *sessionState, turnID string, history []models.Turn) {
+	memories, attached := o.suggestContext(ss, history)
 	resp, err := o.models.Suggest(ctx, models.SuggestRequest{
-		TurnID: turnID, History: history, Style: models.Style{Phrases: []string{}}, N: suggestCount,
+		TurnID: turnID, History: history, Style: models.Style{Phrases: []string{}},
+		Context: attached, Memories: memories, Locale: o.locale, N: suggestCount,
 	})
 	if ctx.Err() != nil {
 		return // cancelled or superseded: the turn moved on

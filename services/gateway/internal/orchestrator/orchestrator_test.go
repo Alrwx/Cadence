@@ -32,9 +32,10 @@ type fakeModels struct {
 	sttDown      bool
 	sttDials     atomic.Int64
 
-	mu          sync.Mutex
-	suggestReqs []models.SuggestRequest
-	ttsVoices   map[string]int // /tts calls per voiceId
+	mu            sync.Mutex
+	suggestReqs   []models.SuggestRequest
+	summarizeReqs [][]models.Turn
+	ttsVoices     map[string]int // /tts calls per voiceId
 }
 
 func (f *fakeModels) ttsCallsFor(voice string) int {
@@ -43,7 +44,16 @@ func (f *fakeModels) ttsCallsFor(voice string) int {
 	return f.ttsVoices[voice]
 }
 
-const fakeUtterance = "How are you feeling today?"
+const (
+	fakeUtterance = "How are you feeling today?"
+	fakeSummary   = "Pat was asked about their health."
+)
+
+func (f *fakeModels) summarizeRequests() [][]models.Turn {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return append([][]models.Turn(nil), f.summarizeReqs...)
+}
 
 func (f *fakeModels) suggestRequests() []models.SuggestRequest {
 	f.mu.Lock()
@@ -84,6 +94,15 @@ func (f *fakeModels) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			{Text: "Not so great today", Kind: "statement"},
 			{Text: "Can you say that again?", Kind: "question"},
 		}})
+	case "/summarize":
+		var req struct {
+			Turns []models.Turn `json:"turns"`
+		}
+		_ = json.NewDecoder(r.Body).Decode(&req)
+		f.mu.Lock()
+		f.summarizeReqs = append(f.summarizeReqs, req.Turns)
+		f.mu.Unlock()
+		_ = json.NewEncoder(w).Encode(map[string]any{"summary": fakeSummary, "ms": 1})
 	case "/stt":
 		f.sttDials.Add(1)
 		if f.sttDown {
@@ -460,7 +479,7 @@ func TestSuggestionPipelineEndToEnd(t *testing.T) {
 	o.session("s1").mu.Lock()
 	defer o.session("s1").mu.Unlock()
 	h := o.session("s1").history
-	if len(h) != 2 || h[1] != (models.Turn{Speaker: "user", Text: pick.Text}) {
+	if len(h) != 2 || h[1].Turn != (models.Turn{Speaker: "user", Text: pick.Text}) {
 		t.Fatalf("history = %+v", h)
 	}
 }

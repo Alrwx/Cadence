@@ -62,3 +62,8 @@ Append-only. One entry per decision: date, decision, why, who.
 **Decision:** On the 3080, Ollama serves `gemma4:e4b` on the same GPU as the model service, and the CUDA backend sets `PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True` by default.
 **Why:** All three models fit in the 3080's 10 GB with about 250 MB to spare, and `/suggest` takes 389 ms p50, well under the 1.5 s budget (`docs/latency.md`). Without expandable segments, TTS ran out of memory in one of two benchmark runs. The margin is thin: if a batch of 4 or a longer context breaks it, switch Whisper to faster-whisper int8 (an estimated 1 GB less, not yet measured) before moving Gemma to another machine.
 **Who:** PaoloAJ (Dev 3)
+
+### 2026-10-25 – Saved conversations belong to the person; revoking store_chat deletes them too
+**Decision:** Migration 004 rebuilds `saved_conversation` with `person_id` and `started_at` instead of a `session_id` foreign key, and adds a `memory` table. Revoking `store_chat` deletes every memory *and* every saved conversation. Memories reach `/suggest` by the keyword rule in §7 (at most 5 sharing a content word with the last 3 turns); attached conversations always do.
+**Why:** The gateway writes no `session` rows, so every insert failed the foreign key, and session ids are client-chosen and reused (`?session=demo`) while a saved conversation is attached in later sessions. Both tables hold summaries of conversation content, which §2 allows only while `store_chat` is granted.
+**Who:** David (Dev 4)

@@ -49,7 +49,8 @@ type sessionState struct {
 	turnID      string
 	turnSeq     int
 	suggestions map[string]string // suggestion id -> text, for the current turn
-	history     []models.Turn
+	history     []heardTurn
+	attached    []string           // saved conversation ids used as /suggest context (conversation.attach)
 	cancelTurn  context.CancelFunc // cancels the in-flight /suggest for the current turn
 
 	// The speech-to-text stream is managed separately because opening it can block on a dial.
@@ -76,6 +77,9 @@ func (o *Orchestrator) OnConnect(s *hub.Session, role hub.Role) {
 	_ = s.Send(ctx, role, protocol.TypeState, turnID, protocol.StateData{State: string(state)})
 	if role == hub.Headset {
 		o.sendPhrases(ctx, s)
+		o.sendConsent(ctx, s)
+		o.sendMemories(ctx, s)
+		o.sendConversations(ctx, s)
 		go o.warmClips()
 	}
 }
@@ -178,6 +182,9 @@ func (o *Orchestrator) OnEvent(s *hub.Session, from hub.Role, env protocol.Envel
 	case *protocol.PhraseSpeakData, *protocol.PhraseSaveData, *protocol.PhraseDeleteData,
 		*protocol.PhraseGroupSaveData, *protocol.PhraseGroupDeleteData:
 		o.onPhraseEvent(ctx, s, ss, d)
+	case *protocol.ConsentSetData, *protocol.MemorySaveData, *protocol.MemoryDeleteData,
+		*protocol.ConversationSaveData, *protocol.ConversationDeleteData, *protocol.ConversationAttachData:
+		o.onMemoryEvent(ctx, s, ss, d)
 	default:
 		slog.Info("event not handled yet", "session", s.ID, "type", env.Type)
 	}

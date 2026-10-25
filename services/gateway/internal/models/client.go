@@ -15,6 +15,8 @@ import (
 const (
 	SuggestTimeout = 3 * time.Second
 	TTSTimeout     = 6 * time.Second
+	// Not in the contract; a whole conversation is a longer prompt than /suggest's.
+	SummarizeTimeout = 20 * time.Second
 )
 
 type Client struct {
@@ -43,11 +45,13 @@ type ContextItem struct {
 }
 
 type SuggestRequest struct {
-	TurnID  string        `json:"turnId"`
-	History []Turn        `json:"history"`
-	Style   Style         `json:"style"`
-	Context []ContextItem `json:"context,omitempty"`
-	N       int           `json:"n"`
+	TurnID   string        `json:"turnId"`
+	History  []Turn        `json:"history"`
+	Style    Style         `json:"style"`
+	Context  []ContextItem `json:"context,omitempty"`
+	Memories []string      `json:"memories,omitempty"`
+	Locale   string        `json:"locale,omitempty"`
+	N        int           `json:"n"`
 }
 
 type Suggestion struct {
@@ -80,6 +84,17 @@ func (c *Client) Suggest(ctx context.Context, req SuggestRequest) (SuggestRespon
 	var resp SuggestResponse
 	err := c.do(ctx, http.MethodPost, "/suggest", req, &resp)
 	return resp, err
+}
+
+// Summarize returns a short summary of turns that keeps names, numbers, times and instructions as said.
+func (c *Client) Summarize(ctx context.Context, turns []Turn, locale string) (string, error) {
+	ctx, cancel := context.WithTimeout(ctx, SummarizeTimeout)
+	defer cancel()
+	var resp struct {
+		Summary string `json:"summary"`
+	}
+	err := c.do(ctx, http.MethodPost, "/summarize", map[string]any{"turns": turns, "locale": locale}, &resp)
+	return resp.Summary, err
 }
 
 // TTS returns WAV bytes for text in the given voice and locale.

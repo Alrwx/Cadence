@@ -80,8 +80,8 @@ Read this before working on `services/gateway`, `packages/protocol`, or the root
 - [ ] **Hotspot rehearsal 3× and a backup video (M4).** Both need the demo Mac.
 
 ### P2: stretch (M5)
-- [ ] Saved conversations: `conversation.save/attach/delete` (schemas exist), `/summarize`, and attached summaries passed to `/suggest`. Needs `store_chat`. Store only the label and summary, never the transcript.
-- [ ] Quick memories: a rolling 60 s transcript in memory, then `memory.save` → `/summarize` → passed to `/suggest`. No protocol schema yet.
+- [x] Saved conversations: `conversation.save/attach/delete` (schemas exist), `/summarize`, and attached summaries passed to `/suggest`. Needs `store_chat`. Store only the label and summary, never the transcript.
+- [x] Quick memories: a rolling 60 s transcript in memory, then `memory.save` → `/summarize` → passed to `/suggest`, plus `consent.set` / `consent` for `store_chat`.
 
 ### Cross-team items found while checking
 - **Dev 3:** the model service's `/voices` has `transcript` as a **required** form field (`services/models/app/main.py`). The contract in §6.2 says `transcript?` is optional, and the phone doesn't send a transcript. Either Dev 3 makes it optional (the service then transcribes the sample with STT), or the gateway would have to send a transcript it doesn't have. **Option 1 is the right fix.**
