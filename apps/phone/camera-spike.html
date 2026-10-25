@@ -36,13 +36,19 @@
   </head>
   <body>
     <h1>Camera spike</h1>
-    <p>Run the steps in order on the Quest. Results also print in the mock gateway's terminal on step 4.</p>
+    <p>
+      Run the steps in order on the Quest. During step 3, look straight at one
+      object (a cup) 1–2 m away. Results also print in the mock gateway's
+      terminal on step 4.
+    </p>
     <button id="list">1. List cameras</button>
     <select id="cameras"></select>
     <button id="open">2. Open camera</button>
     <button id="ar">3. Test in AR (8 s)</button>
     <button id="upload">4. Upload crop</button>
-    <div><video id="video" muted playsinline></video><img id="crop" alt="" /></div>
+    <div>
+      <video id="video" muted playsinline></video><img id="crop" alt="" />
+    </div>
     <pre id="out"></pre>
     <script type="module" src="/src/spike/cameraSpike.ts"></script>
   </body>
