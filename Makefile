@@ -62,7 +62,7 @@ build: ## Build both web apps so the gateway can serve them at /headset/ and /ph
 	pnpm --filter @cadence/headset --filter @cadence/phone build
 
 demo: build ## Demo mode: real models, gateway serving built apps on https://$(LAN_IP):8443
-	trap 'kill 0' EXIT; USE_MOCK_MODELS=0 $(MAKE) models & $(MAKE) gateway & wait
+	trap 'kill 0' EXIT; $(MAKE) models USE_MOCK_MODELS=0 & $(MAKE) gateway DEV_TOOLS=0 & wait
 
 test: test-protocol test-gateway test-models test-shared test-headset ## All tests
 

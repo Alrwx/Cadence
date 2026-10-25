@@ -32,6 +32,7 @@ const (
 	TypeError                = "error"
 	TypeHello                = "hello"
 	TypeInstant              = "instant"
+	TypeListenerSay          = "listener.say"
 	TypeMemories             = "memories"
 	TypeMemoryDelete         = "memory.delete"
 	TypeMemorySave           = "memory.save"
@@ -136,6 +137,11 @@ type HelloData struct {
 // InstantData: User fired an instant gesture phrase. (headset → gateway)
 type InstantData struct {
 	PhraseID string `json:"phraseId"`
+}
+
+// ListenerSayData: Dev tools: what the other person said, typed instead of spoken. The gateway handles it like a final transcript from speech-to-text. Only accepted when the gateway runs with DEV_TOOLS on (the default for `make gateway`, off for `make demo`). (phone or headset → gateway)
+type ListenerSayData struct {
+	Text string `json:"text"`
 }
 
 type MemoriesItem struct {
@@ -293,6 +299,8 @@ func NewData(eventType string) (any, bool) {
 		return &HelloData{}, true
 	case TypeInstant:
 		return &InstantData{}, true
+	case TypeListenerSay:
+		return &ListenerSayData{}, true
 	case TypeMemories:
 		return &MemoriesData{}, true
 	case TypeMemoryDelete:

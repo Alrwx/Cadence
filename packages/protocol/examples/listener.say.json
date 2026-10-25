@@ -1,0 +1,9 @@
+{
+  "type": "listener.say",
+  "v": 1,
+  "sessionId": "s_123",
+  "ts": 1729740009000,
+  "data": {
+    "text": "Do you want some water?"
+  }
+}

@@ -27,6 +27,9 @@ type Orchestrator struct {
 	models *models.Client
 	clips  *clips.Cache
 
+	// DevTools accepts listener.say (typed stand-in for the listener's speech). Set once before serving.
+	DevTools bool
+
 	// Single-user for now: every session belongs to this person.
 	personID string
 	locale   string
@@ -180,6 +183,8 @@ func (o *Orchestrator) OnEvent(s *hub.Session, from hub.Role, env protocol.Envel
 		o.onMemoryEvent(ctx, s, ss, d)
 	case *protocol.VoiceUseData:
 		o.useVoice(ctx, s, from, d.Voice)
+	case *protocol.ListenerSayData:
+		o.onListenerSay(ctx, s, ss, from, d.Text)
 	default:
 		slog.Info("event not handled yet", "session", s.ID, "type", env.Type)
 	}

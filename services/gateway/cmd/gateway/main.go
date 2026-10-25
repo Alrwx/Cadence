@@ -57,6 +57,10 @@ func run() error {
 	}
 
 	orch := orchestrator.New(st, mc, cc, defaultPersonID, locale)
+	orch.DevTools = cfg.DevTools
+	if cfg.DevTools {
+		slog.Info("dev tools on: listener.say accepted (DEV_TOOLS=0 to turn off)")
+	}
 	defer orch.Close() // runs before st.Close: finishes queued metric/turn writes
 	// Speak in the voice recorded on the phone, if there is one with consent still granted.
 	if voiceID, ok, err := st.ActiveVoice(ctx, defaultPersonID); err != nil {

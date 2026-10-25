@@ -5,7 +5,9 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"strings"
 	"time"
+	"unicode/utf8"
 
 	protocol "github.com/Alrwx/Cadence/packages/protocol/go"
 	"github.com/Alrwx/Cadence/services/gateway/internal/hub"
@@ -162,6 +164,45 @@ func (o *Orchestrator) onFinal(s *hub.Session, ss *sessionState, text string) {
 	o.recordTurn(s.ID, "other")
 	s.Broadcast(ctx, protocol.TypeState, turnID, protocol.StateData{State: string(session.Suggesting)})
 	go o.suggest(turnCtx, s, ss, turnID, history, finalAt, spec, specOutcome)
+}
+
+// maxListenerSay bounds a typed listener line, about a long spoken sentence or two.
+const maxListenerSay = 500
+
+// onListenerSay is the dev-tools stand-in for speech: the test bench types what the other person said, and it
+// goes through onFinal exactly like a final transcript from speech-to-text. Unlike speech, a typed line that
+// can't be used is answered with an error, so the tester knows why nothing happened.
+func (o *Orchestrator) onListenerSay(ctx context.Context, s *hub.Session, ss *sessionState, from hub.Role, text string) {
+	if !o.DevTools {
+		o.sendErrorTo(ctx, s, from, "dev_tools_off", "Typing for the listener is turned off on this gateway (DEV_TOOLS=0).")
+		return
+	}
+	text = strings.Join(strings.Fields(text), " ")
+	switch {
+	case text == "":
+		o.sendErrorTo(ctx, s, from, "empty_text", "Type what the listener said first.")
+		return
+	case utf8.RuneCountInString(text) > maxListenerSay:
+		o.sendErrorTo(ctx, s, from, "text_too_long", fmt.Sprintf("Keep it under %d characters.", maxListenerSay))
+		return
+	}
+	state := o.stateOf(ss)
+	switch state {
+	case session.Idle:
+		o.sendErrorTo(ctx, s, from, "not_listening", "Tap Start on the phone first.")
+		return
+	case session.Speaking:
+		o.sendErrorTo(ctx, s, from, "not_listening", "Wait until the reply finishes playing.")
+		return
+	}
+	slog.Info("listener.say", "session", s.ID, "chars", utf8.RuneCountInString(text))
+	o.onFinal(s, ss, text)
+	// Only LISTENING starts a new turn. While suggestions load, a reply is chosen, or the user types, speech is
+	// just captioned, which would look like nothing happened.
+	if state != session.Listening {
+		o.sendErrorTo(ctx, s, from, "caption_only",
+			"Shown as a caption only: the user is already answering. Finish or Cancel that reply, then type again.")
+	}
 }
 
 // beginTurn records what the other person said and moves LISTENING -> SUGGESTING under a new turn id.

@@ -13,6 +13,9 @@ type Config struct {
 	TLSCert   string
 	TLSKey    string
 	WebRoot   string // built apps: <WebRoot>/headset/dist, <WebRoot>/phone/dist
+	// DevTools (DEV_TOOLS, on unless "0") accepts listener.say: the test bench typing what the listener said.
+	// `make demo` turns it off.
+	DevTools bool
 }
 
 func Load() Config {
@@ -23,6 +26,7 @@ func Load() Config {
 		TLSCert:   env("TLS_CERT", "./certs/dev.pem"),
 		TLSKey:    env("TLS_KEY", "./certs/dev-key.pem"),
 		WebRoot:   env("WEB_ROOT", "./apps"),
+		DevTools:  env("DEV_TOOLS", "1") != "0",
 	}
 }
 

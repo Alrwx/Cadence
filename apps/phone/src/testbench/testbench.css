@@ -213,3 +213,19 @@ input {
 .log details[open] summary {
   display: none;
 }
+
+.card-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+button.dismiss {
+  padding: 0.1rem 0.55rem;
+  font-size: 1.1rem;
+  line-height: 1;
+}
+
+.small {
+  font-size: 0.8rem;
+}
