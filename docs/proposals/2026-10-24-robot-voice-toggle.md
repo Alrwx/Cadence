@@ -1,4 +1,4 @@
-# A voice toggle on the phone for the robot-voice contrast
+# A voice toggle and "Delete my voice" on the phone
 
 **For:** Dev 2 (`apps/phone`, `apps/shared`, `mocks/mock-gateway`), optionally Dev 1 (`apps/headset` settings) · **From:** Dev 4 · **Date:** 2026-10-24
 
@@ -46,6 +46,24 @@ Demo step 6 replays the same exchange in a generic robot voice for contrast. The
 
 `voiceApi.ts` already surfaces `code` and `message`, so showing `message` is enough. Keeping the recorded sample on a `models_unavailable` would save the user re-recording. The mock gateway could return a `503` once under a scripted scenario to exercise it.
 
+## "Delete my voice" on the phone (§2: revoking consent deletes the voice)
+The gateway has `DELETE /api/voices` (no body; same origin rule as the other `/api` routes). It withdraws every voice-clone consent of the person and deletes each of their cloned voices: the model service's copy, every cached clip, and the voice profile. Speaking switches to the generic voice right away, and both clients get `voice { active: "default", cloned: false }`.
+
+| Answer | Meaning | What the phone shows |
+|---|---|---|
+| `204` | Done. Also the answer when there was nothing to delete. | "Your voice was deleted." |
+| `502 model_error` | Consent withdrawn and everything on this laptop deleted, but the model service couldn't delete its copy. Nothing uses the voice any more. | `message`, plus a "Try again" button that repeats the `DELETE`; the retry finishes the model-side delete. |
+| `500 storage_failed` | A database or file error partway. Consent is withdrawn if the step that failed came after it. | `message`, plus "Try again". |
+| `403 bad_origin` | Cross-site request. | Not reachable from the phone app. |
+
+Proposed (Dev 2):
+- `apps/shared/src/voiceApi.ts`: `deleteVoice(fetchImpl = fetch): Promise<void>` that sends `DELETE /api/voices` and throws `VoiceApiError` on a non-2xx, like the other two (`readJson` needs to accept an empty `204` body).
+- `apps/phone`: a "Delete my voice" action in the voice settings, with a confirm step ("This deletes your recorded voice and every clip made with it. Replies will use the generic voice."). Show it only when `voice.cloned` is true. Locale keys such as `voice.delete`, `voice.deleteConfirm`, `voice.deleted`.
+- `mocks/mock-gateway`: `DELETE /api/voices` answers `204`, marks every consent revoked (an upload with one then gets `403 no_consent`), and sends `voice { active: "default", cloned: false }` to both roles.
+
+One more upload answer, from the same work: a `POST /api/voices` whose consent was withdrawn while the model service was cloning now gets `403 no_consent`, and the half-made voice is deleted.
+
 ## Tests worth adding
 - `shared.test.ts`: a `voice` event updates the store; the toggle helper sends `voice.use` with the right payload.
 - Mock gateway: `voice.use { voice: "cloned" }` before an upload returns `no_cloned_voice`.
+- `voiceApi.ts`: `deleteVoice` resolves on `204` and throws `VoiceApiError("model_error")` on a `502`.

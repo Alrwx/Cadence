@@ -34,6 +34,9 @@ func (o *Orchestrator) clipFor(ctx context.Context, text, locale string) (string
 // clipIn returns a clip of text in voice. Concurrent requests for the same key share one /tts call
 // (AGENTS(GH).md §7: never synthesize a phrase twice).
 func (o *Orchestrator) clipIn(ctx context.Context, voice, text, locale string) (string, error) {
+	if o.isRevoked(voice) {
+		return "", errRevoked(voice)
+	}
 	id, ok, err := o.store.ClipID(ctx, voice, locale, text)
 	if err != nil {
 		return "", err
@@ -83,8 +86,22 @@ func (o *Orchestrator) synthesize(ctx context.Context, voice, locale, text, exis
 	if err != nil {
 		return "", err
 	}
+	// The consent may have been revoked while /tts ran. ForgetVoices happens before the revoke deletes the
+	// voice's clips, so either that delete sees this clip, or this check sees the revoke and removes it here.
+	if o.isRevoked(voice) {
+		_ = o.store.DeleteVoiceClips(ctx, voice, []string{stored})
+		_ = o.clips.Remove(id)
+		_ = o.clips.Remove(stored)
+		return "", errRevoked(voice)
+	}
 	slog.Info("clip synthesized", "clip", stored, "chars", len(text))
 	return stored, nil
+}
+
+// errRevoked is returned for a voice whose consent was revoked. It counts as an unknown voice, so clipFor
+// makes the clip in the default voice instead.
+func errRevoked(voice string) error {
+	return fmt.Errorf("%w %q: consent revoked", models.ErrUnknownVoice, voice)
 }
 
 func newClipID() string {

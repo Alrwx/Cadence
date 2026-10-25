@@ -4,10 +4,12 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"mime/multipart"
 	"net/http"
 	"net/textproto"
+	"net/url"
 	"time"
 )
 
@@ -82,4 +84,20 @@ func (c *Client) CreateVoice(ctx context.Context, sample VoiceSample, consentID 
 		return "", fmt.Errorf("POST /voices: empty voiceId")
 	}
 	return out.VoiceID, nil
+}
+
+// DeleteVoiceTimeout covers removing the voice's folder and its cached prompt.
+const DeleteVoiceTimeout = 10 * time.Second
+
+// DeleteVoice deletes a cloned voice from the model service (DELETE /voices/{voiceId}). A voice the service
+// doesn't have (404) counts as deleted.
+func (c *Client) DeleteVoice(ctx context.Context, voiceID string) error {
+	ctx, cancel := context.WithTimeout(ctx, DeleteVoiceTimeout)
+	defer cancel()
+	err := c.do(ctx, http.MethodDelete, "/voices/"+url.PathEscape(voiceID), nil, nil)
+	var se *StatusError
+	if errors.As(err, &se) && se.Code == http.StatusNotFound {
+		return nil
+	}
+	return err
 }

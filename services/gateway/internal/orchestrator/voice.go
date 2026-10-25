@@ -53,9 +53,35 @@ func (o *Orchestrator) voiceStatusLocked() protocol.VoiceData {
 // refreshed, so a stalled socket can't hold up the caller (the voice upload's HTTP response).
 func (o *Orchestrator) SetVoice(modelVoiceID string) {
 	o.updateVoice(func() {
+		if o.revoked[modelVoiceID] {
+			return // an upload that raced a revoke: the consent is gone, so the voice is too
+		}
 		o.clonedVoice = modelVoiceID
 		o.useDefault = false
 	})
+}
+
+// ForgetVoices stops using voices whose consent was revoked (DELETE /api/voices): the cloned voice falls back
+// to the default one, SetVoice ignores them, and no clip in them is cached from now on, not even by a
+// synthesis already in flight (see synthesize). Call it before deleting their clips, so none is added after.
+func (o *Orchestrator) ForgetVoices(modelVoiceIDs []string) {
+	o.updateVoice(func() {
+		for _, id := range modelVoiceIDs {
+			if id == "" || id == defaultVoiceID {
+				continue
+			}
+			o.revoked[id] = true
+			if o.clonedVoice == id {
+				o.clonedVoice, o.useDefault = "", false
+			}
+		}
+	})
+}
+
+func (o *Orchestrator) isRevoked(voice string) bool {
+	o.voiceMu.RLock()
+	defer o.voiceMu.RUnlock()
+	return o.revoked[voice]
 }
 
 // updateVoice applies change under voiceMu. If the active voice or the voice event changed, it refreshes every

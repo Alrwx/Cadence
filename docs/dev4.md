@@ -66,10 +66,7 @@ Read this before working on `services/gateway`, `packages/protocol`, or the root
 - [x] **Robot-voice contrast (demo step 6), gateway side.** `voice.use` / `voice` events; `orchestrator/voice.go` keeps the cloned voice apart from the "use default" choice. A `/tts` 404 for the cloned voice falls back to `"default"` (`loseVoice`). The phone toggle is proposed in `docs/proposals/2026-10-24-robot-voice-toggle.md` (Dev 2).
 
 ### P1: M3/M4 polish
-- [ ] **Revoking consent deletes everything (§2):**
-  - the `voice_profile` row and the model service's copy (`DELETE /voices/{id}`)
-  - the `phrase_clip` rows for that voice, plus their files in `<DATA_DIR>/clips`
-  - Because the clip cache has no FK, this delete has to happen **in code**.
+- [x] **Revoking consent deletes everything (§2):** `DELETE /api/voices` (`voices.Handler.Revoke`) revokes the consents, then deletes the model service's copy, the `phrase_clip` rows and files, and the `voice_profile` rows, in an order that a retry can finish (see `store/voices.go` and `docs/decisions.md`). The phone's "Delete my voice" is proposed in `docs/proposals/2026-10-24-robot-voice-toggle.md`. Revoking `store_chat` (memories) is separate and not done here.
 - [ ] **Speculation on partials (§3).** `/suggest` currently fires only on `final`. Plan:
   - debounce partials (~400 ms with no new words)
   - call `/suggest` on the partial transcript

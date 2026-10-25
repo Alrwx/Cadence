@@ -33,8 +33,9 @@ type Orchestrator struct {
 
 	// The voice clips are made in (see voice.go). Never held while sending.
 	voiceMu     sync.RWMutex
-	clonedVoice string // model service voiceId of the person's cloned voice; "" if none
-	useDefault  bool   // the person chose the generic voice (voice.use) over the cloned one
+	clonedVoice string          // model service voiceId of the person's cloned voice; "" if none
+	useDefault  bool            // the person chose the generic voice (voice.use) over the cloned one
+	revoked     map[string]bool // model voiceIds whose consent was revoked: never used or cached again
 
 	voiceRefreshing atomic.Bool // refreshVoice is sending the voice to the sessions
 	voiceDirty      atomic.Bool // the voice changed while it was
@@ -67,7 +68,7 @@ type sessionState struct {
 func New(st *store.Store, mc *models.Client, cc *clips.Cache, personID, locale string) *Orchestrator {
 	return &Orchestrator{
 		store: st, models: mc, clips: cc,
-		personID: personID, locale: locale,
+		personID: personID, locale: locale, revoked: map[string]bool{},
 		state: map[string]*sessionState{}, inflight: map[string]*flight{},
 	}
 }

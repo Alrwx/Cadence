@@ -97,7 +97,7 @@ func (c *Client) TTS(ctx context.Context, voiceID, text, locale string) ([]byte,
 	return wav, err
 }
 
-// do sends body as JSON and decodes the response into out (raw bytes when out is *[]byte).
+// do sends body as JSON and decodes the response into out (raw bytes when out is *[]byte, ignored when nil).
 func (c *Client) do(ctx context.Context, method, path string, body, out any) error {
 	var reader io.Reader
 	if body != nil {
@@ -121,6 +121,9 @@ func (c *Client) do(ctx context.Context, method, path string, body, out any) err
 	defer resp.Body.Close()
 	if resp.StatusCode >= 300 {
 		return statusError(method, path, resp)
+	}
+	if out == nil {
+		return nil
 	}
 	if raw, ok := out.(*[]byte); ok {
 		*raw, err = io.ReadAll(resp.Body)

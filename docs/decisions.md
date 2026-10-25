@@ -70,3 +70,12 @@ Append-only. One entry per decision: date, decision, why, who.
 - `POST /api/voices` answers `503 models_unavailable` when the model service is unreachable or still loading, and keeps `502 model_error` for a sample the model service rejected.
 **Why:** Demo step 6 needs a one-tap contrast. Without the fallback, a wiped voices folder made every clip fail until someone re-recorded. The phone should only ask for a new recording when the recording was the problem.
 **Who:** Dev 4
+
+### 2026-10-24 – `DELETE /api/voices` revokes voice consent and deletes the voice everywhere
+**Decision:**
+- `DELETE /api/voices` (phone, same origin rule as the other `/api` routes) revokes every unrevoked `voice_clone` consent of the person, then, for every voice under a revoked consent, deletes the model service's copy (`DELETE /voices/{id}`, 404 counts as done), the clip-cache rows and WAV files for that voiceId, and the `voice_profile` row. Sessions switch to `"default"`. Answers `204`, or `502 model_error` if the model service couldn't delete its copy.
+- Order: revoke first (from then on `ActiveVoice` ignores the voice, even after a restart), then the model copy, then the clip files, then their rows, then the profile. The profile row is kept when the model delete fails, as the only record of which model voice to delete, so a repeated `DELETE` finishes the job. Consent rows stay, with `revoked_at` set, as the record of what was agreed and when it was withdrawn.
+- The orchestrator remembers revoked voiceIds in memory: it never uses or caches a clip in one again, and a synthesis already running when the revoke lands deletes its own clip.
+- `voice_profile` inserts check in the same statement that the consent is still active. An upload whose consent is withdrawn while the model service clones gets `403 no_consent`, and the gateway deletes the new model voice. It also deletes it if saving the profile fails for any other reason.
+**Why:** §2: revoking consent deletes the voice and all of its clips. The clip cache has no FK to `voice_profile` (migration 002), so the delete happens in code, ordered so a crash at any step leaves no usable voice under a revoked consent.
+**Who:** Dev 4

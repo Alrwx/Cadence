@@ -13,32 +13,59 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/Alrwx/Cadence/services/gateway/internal/clips"
 	"github.com/Alrwx/Cadence/services/gateway/internal/models"
 	"github.com/Alrwx/Cadence/services/gateway/internal/store"
 )
 
+// fakeCloner is the model service: CreateVoice hands out mlx_voice_1, mlx_voice_2, ...
 type fakeCloner struct {
 	calls  int
 	sample models.VoiceSample
 	err    error
+	during func() // runs while "cloning", before CreateVoice returns
+
+	deleted   []string // DeleteVoice calls, in order
+	deleteErr error
 }
 
 func (f *fakeCloner) CreateVoice(_ context.Context, sample models.VoiceSample, _ string) (string, error) {
 	f.calls++
 	f.sample = sample
+	if f.during != nil {
+		f.during()
+	}
 	if f.err != nil {
 		return "", f.err
 	}
-	return "mlx_voice_1", nil
+	return fmt.Sprintf("mlx_voice_%d", f.calls), nil
 }
 
-type fakeSetter struct{ voice string }
+func (f *fakeCloner) DeleteVoice(_ context.Context, id string) error {
+	f.deleted = append(f.deleted, id)
+	return f.deleteErr
+}
+
+type fakeSetter struct {
+	voice     string
+	forgotten []string
+}
 
 func (f *fakeSetter) SetVoice(id string) { f.voice = id }
 
+func (f *fakeSetter) ForgetVoices(ids []string) {
+	f.forgotten = append(f.forgotten, ids...)
+	for _, id := range ids {
+		if f.voice == id {
+			f.voice = ""
+		}
+	}
+}
+
 func newHandler(t *testing.T) (*Handler, *fakeCloner, *fakeSetter) {
 	t.Helper()
-	st, err := store.Open(filepath.Join(t.TempDir(), "test.db"))
+	dir := t.TempDir()
+	st, err := store.Open(filepath.Join(dir, "test.db"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -46,8 +73,12 @@ func newHandler(t *testing.T) (*Handler, *fakeCloner, *fakeSetter) {
 	if _, err := st.EnsurePerson(context.Background(), "p1", "Pat", store.DefaultLocale); err != nil {
 		t.Fatal(err)
 	}
+	cc, err := clips.New(filepath.Join(dir, "clips"))
+	if err != nil {
+		t.Fatal(err)
+	}
 	fc, fs := &fakeCloner{}, &fakeSetter{}
-	return &Handler{Store: st, Models: fc, Voices: fs, PersonID: "p1", Locale: store.DefaultLocale}, fc, fs
+	return &Handler{Store: st, Models: fc, Voices: fs, Clips: cc, PersonID: "p1", Locale: store.DefaultLocale}, fc, fs
 }
 
 func postConsent(h *Handler, body string) *httptest.ResponseRecorder {

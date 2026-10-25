@@ -71,11 +71,12 @@ func run() error {
 	mux.Handle("GET /ws", h)
 	mux.Handle("GET /clips/{file}", cc)
 	vh := &voices.Handler{
-		Store: st, Models: mc, Voices: orch, PersonID: defaultPersonID, Locale: locale,
+		Store: st, Models: mc, Voices: orch, Clips: cc, PersonID: defaultPersonID, Locale: locale,
 		OriginPatterns: h.OriginPatterns, // same rule as /ws
 	}
 	mux.HandleFunc("POST /api/consent", vh.Consent)
 	mux.HandleFunc("POST /api/voices", vh.Upload)
+	mux.HandleFunc("DELETE /api/voices", vh.Revoke)
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, r *http.Request) {
 		health, err := mc.Health(r.Context())
 		if err != nil {

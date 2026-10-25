@@ -92,6 +92,39 @@ func TestCreateVoiceUnavailable(t *testing.T) {
 	}
 }
 
+func TestDeleteVoice(t *testing.T) {
+	var paths []string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodDelete {
+			http.Error(w, "wrong method", http.StatusMethodNotAllowed)
+			return
+		}
+		paths = append(paths, r.URL.EscapedPath())
+		switch r.URL.Path {
+		case "/voices/mlx_1":
+			w.WriteHeader(http.StatusNoContent)
+		case "/voices/mlx_gone":
+			http.Error(w, "not found", http.StatusNotFound)
+		default:
+			http.Error(w, "loading", http.StatusServiceUnavailable)
+		}
+	}))
+	defer srv.Close()
+	c := New(srv.URL)
+	if err := c.DeleteVoice(context.Background(), "mlx_1"); err != nil {
+		t.Fatalf("delete: %v", err)
+	}
+	if err := c.DeleteVoice(context.Background(), "mlx_gone"); err != nil {
+		t.Fatalf("an already deleted voice: %v", err)
+	}
+	if err := c.DeleteVoice(context.Background(), "a/b"); !errors.Is(err, ErrUnavailable) {
+		t.Fatalf("503: err = %v", err)
+	}
+	if paths[2] != "/voices/a%2Fb" {
+		t.Fatalf("voiceId not escaped: %q", paths[2])
+	}
+}
+
 func TestTTSUnknownVoice(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, `{"detail":"unknown voiceId mlx_gone"}`, http.StatusNotFound)

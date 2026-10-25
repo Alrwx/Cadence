@@ -33,9 +33,10 @@ type fakeModels struct {
 	sttDials     atomic.Int64
 	missingVoice string // /tts answers 404 for this voiceId, as the model service does for an unknown voice
 
-	mu          sync.Mutex
-	suggestReqs []models.SuggestRequest
-	ttsVoices   map[string]int // /tts calls per voiceId
+	mu            sync.Mutex
+	suggestReqs   []models.SuggestRequest
+	ttsVoices     map[string]int // /tts calls per voiceId
+	deletedVoices []string       // DELETE /voices/{id} calls
 }
 
 func (f *fakeModels) ttsCallsFor(voice string) int {
@@ -112,7 +113,16 @@ func (f *fakeModels) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				_ = conn.Write(ctx, websocket.MessageText, []byte(`{"kind":"final","text":"`+fakeUtterance+`"}`))
 			}
 		}
+	case "/voices":
+		_, _ = w.Write([]byte(`{"voiceId":"mlx_cloned"}`))
 	default:
+		if id, ok := strings.CutPrefix(r.URL.Path, "/voices/"); ok && r.Method == http.MethodDelete {
+			f.mu.Lock()
+			f.deletedVoices = append(f.deletedVoices, id)
+			f.mu.Unlock()
+			w.WriteHeader(http.StatusNoContent)
+			return
+		}
 		http.NotFound(w, r)
 	}
 }
