@@ -4,17 +4,18 @@ version = "0.1.0"
 description = "Local STT, reply suggestions, and voice-cloned TTS behind the contract in AGENTS(GH).md §6.2"
 requires-python = ">=3.12"
 dependencies = [
+    "av==19.0.1",  # FFmpeg's libraries, bundled: decodes uploaded samples, including video
     "fastapi>=0.162.0",
+    "numpy>=2.0",
     "python-multipart>=0.0.32",
     "uvicorn[standard]>=0.54.0",
 ]
 
 [project.optional-dependencies]
-# Apple Silicon backends for the demo MacBook. Verify each in the M1 spikes (§4 unverified assumptions).
+# Apple Silicon backends for the demo MacBook (MODELS_BACKEND=mlx). Suggestions run in Ollama, outside this env.
 mlx = [
-    "mlx-whisper; sys_platform == 'darwin'",
-    "mlx-lm; sys_platform == 'darwin'",
-    "mlx-audio; sys_platform == 'darwin'",
+    "mlx-whisper==0.4.3; sys_platform == 'darwin'",
+    "mlx-audio==0.5.8; sys_platform == 'darwin'",
 ]
 # RTX 3080 server (MODELS_BACKEND=cuda). torch 2.8 is the newest release with a prebuilt flash-attn 2.8.3 wheel;
 # cu126 runs on the Debian trixie driver (550, CUDA 12.4) via CUDA minor-version compatibility.
@@ -28,10 +29,15 @@ cuda = [
 
 [dependency-groups]
 dev = [
+    "httpx>=0.28.1",  # the locked starlette's TestClient imports httpx; starlette 1.x imports httpx2
     "httpx2>=2.16.0",
     "pytest>=9.1.1",
     "ruff>=0.14.0",
 ]
+
+[tool.uv]
+# mlx-audio needs transformers 5, qwen-tts pins 4.57.3. They never share a machine, so resolve them separately.
+conflicts = [[{ extra = "mlx" }, { extra = "cuda" }]]
 
 [tool.uv.sources]
 torch = { index = "pytorch-cu126", marker = "sys_platform == 'linux'" }

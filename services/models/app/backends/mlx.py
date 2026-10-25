@@ -1,68 +1,69 @@
-"""Apple Silicon backends: mlx-whisper, Gemma 4 via mlx-lm, Qwen3-TTS via mlx-audio.
+"""Apple Silicon backends: mlx-whisper for STT, Qwen3-TTS via mlx-audio. Needs `--extra mlx` on macOS.
 
-Each class loads its model once in __init__. The method bodies are the M1 spikes: fill them in and record
-timings in docs/latency.md. Until then they raise NotImplementedError, which the routes turn into 501.
+Written against the mlx-whisper 0.4.3 and mlx-audio 0.5.8 sources, but NOT YET RUN: there's no Mac in CI. The
+first run on the M4 Pro is the check (docs/dev3.md). mlx is imported inside load(), so this module imports anywhere.
 """
 
-from collections.abc import AsyncIterator
-from pathlib import Path
-from typing import Literal
+from typing import Any
 
-from app.parsing import parse_replies
-from app.schemas import ContextItem, Reply, Style, Turn
+import numpy as np
 
-PROMPTS = Path(__file__).resolve().parent.parent / "prompts"
+from app.locale import language_code
 
 
 class MlxStt:
     def __init__(self, model: str) -> None:
-        self.model = model  # TODO(Dev 3): load mlx-whisper; VAD-based chunking
+        self.model_id = model
 
-    async def transcribe(self, frames: AsyncIterator[bytes]) -> AsyncIterator[tuple[Literal["partial", "final"], str]]:
-        raise NotImplementedError("mlx-whisper streaming STT")
-        yield  # pragma: no cover  (makes this an async generator)
+    def load(self) -> None:
+        import mlx_whisper
 
+        self.mlx_whisper = mlx_whisper
+        self.transcribe(np.zeros(16000, dtype=np.float32), "en")  # downloads and caches the model
 
-class MlxSuggest:
-    def __init__(self, model: str) -> None:
-        self.model = model  # TODO(Dev 3): load Gemma 4 E4B 4-bit with mlx-lm
-        self.prompt = (PROMPTS / "suggest.md").read_text(encoding="utf-8")
-        self.summary_prompt = (PROMPTS / "summarize.md").read_text(encoding="utf-8")
-
-    def suggest(self, history: list[Turn], style: Style, context: list[ContextItem], n: int) -> list[Reply]:
-        raw = self._generate(self._render(history, style, context, n))
-        try:
-            return parse_replies(raw, n)
-        except ValueError:
-            return parse_replies(self._generate(self._render(history, style, context, n)), n)  # retry once
-
-    def summarize(self, turns: list[Turn]) -> str:
-        transcript = "\n".join(f"{t.speaker}: {t.text}" for t in turns)
-        return self._generate(self.summary_prompt.format(transcript=transcript)).strip()
-
-    def _render(self, history: list[Turn], style: Style, context: list[ContextItem], n: int) -> str:
-        return self.prompt.format(
-            n=n,
-            history="\n".join(f"{t.speaker}: {t.text}" for t in history[-8:]),
-            tone=style.tone or "plain and friendly",
-            phrases="\n".join(f"- {p}" for p in style.phrases) or "(none)",
-            context="\n".join(f"- {c.label}: {c.summary}" for c in context) or "(none)",
+    def transcribe(self, audio: np.ndarray, locale: str) -> str:
+        result = self.mlx_whisper.transcribe(
+            audio,
+            path_or_hf_repo=self.model_id,
+            language=language_code(locale),
+            temperature=0.0,
+            condition_on_previous_text=False,
+            verbose=None,
         )
-
-    def _generate(self, prompt: str) -> str:
-        raise NotImplementedError("Gemma 4 generation via mlx-lm")
+        return str(result["text"]).strip()
 
 
 class MlxTts:
+    sample_rate = 24000
+
     def __init__(self, model: str) -> None:
-        self.model = model  # TODO(Dev 3): load Qwen3-TTS Base via mlx-audio
-        self.voices: dict[str, object] = {}  # voiceId -> cached voice prompt
+        self.model_id = model
 
-    def create_voice(self, audio: bytes, transcript: str) -> str:
-        raise NotImplementedError("Qwen3-TTS voice cloning")
+    def load(self) -> None:
+        import mlx.core as mx
+        from mlx_audio.tts.utils import load
 
-    def delete_voice(self, voice_id: str) -> None:
-        self.voices.pop(voice_id, None)
+        self.mx = mx
+        self.model = load(self.model_id)
+        self.sample_rate = self.model.sample_rate
 
-    def synthesize(self, voice_id: str, text: str) -> bytes:
-        raise NotImplementedError("Qwen3-TTS synthesis")
+    def make_prompt(self, ref_audio: np.ndarray, ref_text: str) -> Any:
+        # mlx-audio caches the encoded reference itself (keyed by the clip), so the prompt is just the inputs.
+        return self.mx.array(ref_audio), ref_text
+
+    def generate(self, prompt: Any, texts: list[str], language: str, max_tokens: int) -> list[np.ndarray]:
+        ref_audio, ref_text = prompt
+        lang = language.lower()
+        if len(texts) == 1:
+            results = self.model.generate(
+                text=texts[0], ref_audio=ref_audio, ref_text=ref_text, lang_code=lang, max_tokens=max_tokens
+            )
+            return [np.concatenate([np.array(r.audio, dtype=np.float32) for r in results])]
+        out: list[np.ndarray | None] = [None] * len(texts)
+        for r in self.model.batch_generate(
+            texts=texts, ref_audio=ref_audio, ref_text=ref_text, lang_code=lang, max_tokens=max_tokens, stream=False
+        ):
+            out[r.sequence_idx] = np.array(r.audio, dtype=np.float32)
+        if any(o is None for o in out):
+            raise RuntimeError("mlx-audio batch returned fewer clips than texts")
+        return out  # type: ignore[return-value]
