@@ -16,7 +16,7 @@ export interface Notice {
 
 interface ViewState {
   view: View;
-  /** Group shown in Saved phrases, and where "Bookmark last reply" saves to. */
+  /** Group shown in Saved phrases, and where Bookmark saves to. */
   groupId: string | null;
   /** Text the compose keyboard opens with. */
   draft: string;
