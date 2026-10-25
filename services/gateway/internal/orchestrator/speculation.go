@@ -133,7 +133,7 @@ func (o *Orchestrator) speculate(s *hub.Session, ss *sessionState, gen int) {
 		start := time.Now()
 		c.resp, c.err = o.models.Suggest(ctx, models.SuggestRequest{
 			TurnID: nextTurn, History: c.history, Style: models.Style{Phrases: []string{}},
-			Context: attached, Memories: memories, Locale: o.locale, N: suggestCount,
+			Context: attached, Memories: memories, Locale: o.currentLocale(), N: suggestCount,
 		})
 		o.recordSince(s.ID, metricSuggest, start, "spec:"+suggestOutcome(ctx, c.err))
 		close(c.done)

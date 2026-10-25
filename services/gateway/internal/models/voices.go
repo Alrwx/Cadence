@@ -24,6 +24,8 @@ type VoiceSample struct {
 	ContentType string
 	// Transcript of the sample, if known. Empty means the model service transcribes it (§6.2).
 	Transcript string
+	// Locale of the speech in the sample, e.g. "es": what the model service transcribes it as. Empty means "en".
+	Locale string
 }
 
 // CreateVoice clones a voice from sample (POST /voices) and returns the model service's voiceId.
@@ -52,8 +54,11 @@ func (c *Client) CreateVoice(ctx context.Context, sample VoiceSample, consentID 
 	if err := form.WriteField("consentId", consentID); err != nil {
 		return "", fmt.Errorf("build /voices: %w", err)
 	}
-	if sample.Transcript != "" {
-		if err := form.WriteField("transcript", sample.Transcript); err != nil {
+	for name, value := range map[string]string{"transcript": sample.Transcript, "locale": sample.Locale} {
+		if value == "" {
+			continue
+		}
+		if err := form.WriteField(name, value); err != nil {
 			return "", fmt.Errorf("build /voices: %w", err)
 		}
 	}

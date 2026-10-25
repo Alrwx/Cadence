@@ -85,6 +85,17 @@ export interface InstantData {
   phraseId: string;
 }
 
+/** The language everything runs in: listening, suggestions, speech, and both UIs. Sent on connect and after any change. supported lists the locales language.set accepts. (gateway → headset, phone) */
+export interface LanguageData {
+  locale: string;
+  supported: string[];
+}
+
+/** Switch the language. Answered with a language event, or an error when the locale isn't supported. Creating a voice also switches to the language of its clip. (phone or headset → gateway) */
+export interface LanguageSetData {
+  locale: string;
+}
+
 /** Dev tools: what the other person said, typed instead of spoken. The gateway handles it like a final transcript from speech-to-text. Only accepted when the gateway runs with DEV_TOOLS on (the default for `make gateway`, off for `make demo`). (phone or headset → gateway) */
 export interface ListenerSayData {
   text: string;
@@ -226,6 +237,8 @@ export const EVENT_TYPES = [
   "error",
   "hello",
   "instant",
+  "language",
+  "language.set",
   "listener.say",
   "memories",
   "memory.delete",
@@ -265,6 +278,8 @@ export interface EventDataMap {
   "error": ErrorData;
   "hello": HelloData;
   "instant": InstantData;
+  "language": LanguageData;
+  "language.set": LanguageSetData;
   "listener.say": ListenerSayData;
   "memories": MemoriesData;
   "memory.delete": MemoryDeleteData;

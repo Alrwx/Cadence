@@ -8,7 +8,6 @@ import { Button3D } from "./Button3D.tsx";
 import { addWord, backspace, finish, typeKey } from "./textEntry.ts";
 import { useView } from "./views.ts";
 
-const LETTER_ROWS = ["qwertyuiop", "asdfghjkl'", "zxcvbnm,.?"];
 const KEY = 0.075;
 const KEY_STEP = 0.082;
 const WORD_WIDTH = 0.14;
@@ -68,9 +67,11 @@ export function TextEntryView() {
 }
 
 function Letters({ onKey }: { onKey: (key: string) => void }) {
+  // Per language: Spanish swaps the apostrophe for ñ and adds the ´ dead key (´ then a vowel types á é í ó ú).
+  const rows = t("entry.letters.rows").split("|");
   return (
     <group position={[0, KEYS_TOP, 0]}>
-      {LETTER_ROWS.map((row, r) =>
+      {rows.map((row, r) =>
         [...row].map((key, i) => (
           <Button3D
             key={key}

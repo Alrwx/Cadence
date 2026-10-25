@@ -89,5 +89,8 @@
   "voice.chooseAgain": "Choose something else",
   "voice.transcriptLabel": "What's said in the clip (optional)",
   "voice.transcriptPlaceholder": "Type it word for word",
-  "voice.transcriptHint": "Only what's said in the first {seconds} seconds. Leave it blank and Cadence will work it out."
+  "voice.transcriptHint": "Only what's said in the first {seconds} seconds. Leave it blank and Cadence will work it out.",
+  "language.switchTo": "Switch to {language}",
+  "voice.languageLabel": "Language spoken in the clip",
+  "voice.doneLanguage": "Cadence will now listen, suggest replies, and speak in {language}."
 }

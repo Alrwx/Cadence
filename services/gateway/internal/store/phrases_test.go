@@ -136,3 +136,54 @@ func TestClipCacheMarksAudioReady(t *testing.T) {
 		t.Fatal("clip leaked across voices")
 	}
 }
+
+func TestEnsureStarterPhrasesAddsALanguageOnce(t *testing.T) {
+	ctx := context.Background()
+	s := openTest(t)
+	if _, err := s.EnsurePerson(ctx, "p1", "Pat", DefaultLocale); err != nil {
+		t.Fatal(err)
+	}
+	for i, want := range []bool{true, false} {
+		added, err := s.EnsureStarterPhrases(ctx, "p1", "es")
+		if err != nil || added != want {
+			t.Fatalf("call %d: added = %v, err = %v", i, added, err)
+		}
+	}
+	if added, err := s.EnsureStarterPhrases(ctx, "p1", DefaultLocale); err != nil || added {
+		t.Fatalf("english again: added = %v, err = %v", added, err)
+	}
+	if added, err := s.EnsureStarterPhrases(ctx, "p1", "xx"); err != nil || added {
+		t.Fatalf("unknown locale: added = %v, err = %v", added, err)
+	}
+	groups, err := s.PhraseGroups(ctx, "p1", "v1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(groups) != 4 || groups[2].Name != "Hospital (español)" || groups[3].Name != "Demo (español)" {
+		t.Fatalf("groups = %+v", groups)
+	}
+	first := groups[2].Phrases[0]
+	if first.Text != "Necesito agua" || first.Locale != "es" {
+		t.Fatalf("first spanish phrase = %+v", first)
+	}
+	if groups[0].Phrases[0].Locale != DefaultLocale {
+		t.Fatalf("english phrases changed: %+v", groups[0].Phrases[0])
+	}
+}
+
+func TestSetPersonLocale(t *testing.T) {
+	ctx := context.Background()
+	s := openTest(t)
+	if _, err := s.EnsurePerson(ctx, "p1", "Pat", DefaultLocale); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.SetPersonLocale(ctx, "p1", "es"); err != nil {
+		t.Fatal(err)
+	}
+	if got, err := s.PersonLocale(ctx, "p1"); err != nil || got != "es" {
+		t.Fatalf("locale = %q, err = %v", got, err)
+	}
+	if err := s.SetPersonLocale(ctx, "nobody", "es"); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("unknown person: err = %v", err)
+	}
+}

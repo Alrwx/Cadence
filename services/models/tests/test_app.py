@@ -1,4 +1,5 @@
 import io
+import json
 import time
 import wave
 
@@ -88,6 +89,15 @@ def test_voice_without_transcript_is_transcribed(client, models, tmp_path):
     assert client.delete(f"/voices/{voice_id}").status_code == 204
     assert not (tmp_path / "voices" / voice_id).exists()
     assert client.post("/tts", json={"voiceId": voice_id, "text": "Hi"}).status_code == 404
+
+
+def test_voice_is_transcribed_in_the_language_of_the_clip(client, models, tmp_path):
+    data = {"consentId": "c1", "locale": "es"}
+    resp = client.post("/voices", files={"audio": ("s.wav", sample_wav(), "audio/wav")}, data=data)
+    assert resp.status_code == 200, resp.text
+    assert [locale for _, locale in models.stt.calls] == ["es"]
+    meta = json.loads((tmp_path / "voices" / resp.json()["voiceId"] / "meta.json").read_text("utf-8"))
+    assert meta["locale"] == "es"
 
 
 def test_voice_with_transcript_skips_stt(client, models):

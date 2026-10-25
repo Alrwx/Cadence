@@ -16,6 +16,7 @@ import (
 	"net/http"
 	"net/url"
 	"path"
+	"slices"
 	"strings"
 
 	"github.com/Alrwx/Cadence/services/gateway/internal/models"
@@ -38,12 +39,15 @@ type Cloner interface {
 	DeleteVoice(ctx context.Context, modelVoiceID string) error
 }
 
-// VoiceSetter switches the live sessions' voice. Neither method may block on the sessions' sockets: they run
-// inside an HTTP request.
+// VoiceSetter switches the live sessions' voice and language. No method may block on the sessions' sockets:
+// they run inside an HTTP request.
 type VoiceSetter interface {
 	SetVoice(modelVoiceID string)
 	// ForgetVoices stops using voices whose consent was revoked and stops caching clips in them.
 	ForgetVoices(modelVoiceIDs []string)
+	// Locale is the language conversations run in; SetLocale switches it (after a voice is made in another one).
+	Locale() string
+	SetLocale(ctx context.Context, locale string) error
 }
 
 // ClipRemover deletes cached clip files.
@@ -57,7 +61,8 @@ type Handler struct {
 	Voices   VoiceSetter
 	Clips    ClipRemover
 	PersonID string // single-user for the hackathon: every session belongs to this person
-	Locale   string
+	// Locales lists the languages a sample may be in (orchestrator.SupportedLocales); empty accepts any.
+	Locales []string
 	// OriginPatterns lists extra allowed browser origins (the Vite dev servers), the same as the /ws hub.
 	OriginPatterns []string
 }
@@ -134,7 +139,9 @@ func (h *Handler) Consent(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusCreated, map[string]string{"consentId": id})
 }
 
-// Upload handles POST /api/voices (multipart: audio, consentId, sessionId, optional transcript).
+// Upload handles POST /api/voices (multipart: audio, consentId, sessionId, optional transcript and locale).
+// locale is the language spoken in the sample (default: the current language); once the voice is made, the
+// whole app switches to it.
 func (h *Handler) Upload(w http.ResponseWriter, r *http.Request) {
 	if !h.allowOrigin(w, r) {
 		return
@@ -156,6 +163,11 @@ func (h *Handler) Upload(w http.ResponseWriter, r *http.Request) {
 		return
 	case form.consentID == "" || form.sessionID == "":
 		writeError(w, http.StatusBadRequest, "bad_request", "Missing consentId or sessionId.")
+		return
+	case form.sample.Locale == "":
+		form.sample.Locale = h.Voices.Locale()
+	case len(h.Locales) > 0 && !slices.Contains(h.Locales, form.sample.Locale):
+		writeError(w, http.StatusBadRequest, "unsupported_language", "That language isn't available yet.")
 		return
 	}
 
@@ -181,7 +193,7 @@ func (h *Handler) Upload(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadGateway, "model_error", "The voice model couldn't use that sample. Try again or use another recording.")
 		return
 	}
-	profileID, err := h.Store.CreateVoiceProfile(r.Context(), h.PersonID, form.consentID, modelVoiceID, h.Locale)
+	profileID, err := h.Store.CreateVoiceProfile(r.Context(), h.PersonID, form.consentID, modelVoiceID, form.sample.Locale)
 	if err != nil {
 		// No profile means nothing would ever delete the model service's copy: delete it now.
 		h.deleteModelVoice(context.WithoutCancel(r.Context()), modelVoiceID)
@@ -194,7 +206,11 @@ func (h *Handler) Upload(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	h.Voices.SetVoice(modelVoiceID)
-	slog.Info("voice created", "voice", profileID, "model_voice", modelVoiceID, "session", form.sessionID, "bytes", len(form.sample.Data))
+	// The voice is made either way; a language that can't be saved just stays as it was.
+	if err := h.Voices.SetLocale(context.WithoutCancel(r.Context()), form.sample.Locale); err != nil {
+		slog.Error("switch to the sample's language", "locale", form.sample.Locale, "err", err)
+	}
+	slog.Info("voice created", "locale", form.sample.Locale, "voice", profileID, "model_voice", modelVoiceID, "session", form.sessionID, "bytes", len(form.sample.Data))
 	writeJSON(w, http.StatusCreated, map[string]string{"voiceId": profileID})
 }
 
@@ -342,7 +358,7 @@ func readForm(r *http.Request) (uploadForm, error) {
 			f.sample.Data = buf.Bytes()
 			f.sample.FileName = part.FileName()
 			f.sample.ContentType = part.Header.Get("Content-Type")
-		case "consentId", "sessionId", "transcript":
+		case "consentId", "sessionId", "transcript", "locale":
 			value, err := io.ReadAll(io.LimitReader(part, maxFieldBytes))
 			if err != nil {
 				return f, err
@@ -353,6 +369,8 @@ func readForm(r *http.Request) (uploadForm, error) {
 				f.consentID = text
 			case "sessionId":
 				f.sessionID = text
+			case "locale":
+				f.sample.Locale = text
 			default:
 				f.sample.Transcript = text
 			}

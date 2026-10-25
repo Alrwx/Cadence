@@ -24,7 +24,7 @@ func (o *Orchestrator) onPhraseEvent(ctx context.Context, s *hub.Session, ss *se
 		// fromClipId needs no special handling: the clip cache is keyed by text, so a bookmarked reply
 		// reuses the clip that was just played.
 		var p store.Phrase
-		if p, err = o.store.SavePhrase(ctx, o.personID, d.GroupID, d.Text, o.locale); err == nil {
+		if p, err = o.store.SavePhrase(ctx, o.personID, d.GroupID, d.Text, o.currentLocale()); err == nil {
 			o.sendPhrases(ctx, s)
 			go o.prepareClip(s, p.Text, p.Locale)
 			return
@@ -89,8 +89,9 @@ func (o *Orchestrator) warmOnce(voice string) {
 
 	type item struct{ text, locale string }
 	var todo []item
-	for _, text := range instantText {
-		todo = append(todo, item{text, o.locale})
+	locale := o.currentLocale()
+	for _, text := range instantText[locale] {
+		todo = append(todo, item{text, locale})
 	}
 	groups, err := o.store.PhraseGroups(ctx, o.personID, voice)
 	if err != nil {

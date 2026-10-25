@@ -148,6 +148,36 @@ textarea.input {
   opacity: 0.4;
 }
 
+.segmented {
+  display: flex;
+  gap: 4px;
+  padding: 4px;
+  border-radius: 12px;
+  background: var(--fill);
+}
+
+.segmented button {
+  flex: 1;
+  min-height: 40px;
+  border: 0;
+  border-radius: 9px;
+  background: none;
+  color: var(--muted);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.segmented button[aria-pressed="true"] {
+  background: var(--surface);
+  color: var(--text);
+  box-shadow: 0 1px 3px color-mix(in srgb, var(--text) 15%, transparent);
+}
+
+.segmented button:disabled {
+  cursor: default;
+}
+
 .reading {
   padding: 18px;
   font-size: 19px;

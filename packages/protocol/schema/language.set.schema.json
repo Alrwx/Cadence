@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "language.set",
+  "description": "Switch the language. Answered with a language event, or an error when the locale isn't supported. Creating a voice also switches to the language of its clip.",
+  "x-direction": "phone or headset → gateway",
+  "type": "object",
+  "properties": {
+    "locale": {
+      "type": "string",
+      "description": "BCP 47 locale, e.g. \"es\""
+    }
+  },
+  "required": [
+    "locale"
+  ],
+  "additionalProperties": false
+}

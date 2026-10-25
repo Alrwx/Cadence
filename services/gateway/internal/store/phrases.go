@@ -40,13 +40,22 @@ type Group struct {
 	Phrases []Phrase
 }
 
-// Every new person starts with these groups (AGENTS(GH).md §7).
-var starterGroups = []struct {
+type starterGroup struct {
 	name    string
 	phrases []string
-}{
-	{"Hospital", []string{"I need some water", "I need to use the restroom", "I'm in pain", "Can you call my family?"}},
-	{"Demo", []string{"Hi judges, I'll be demoing Cadence"}},
+}
+
+// Every new person starts with these groups in their language (AGENTS(GH).md §7), and gets them in another
+// language the first time they switch to it (EnsureStarterPhrases).
+var starterGroups = map[string][]starterGroup{
+	"en": {
+		{"Hospital", []string{"I need some water", "I need to use the restroom", "I'm in pain", "Can you call my family?"}},
+		{"Demo", []string{"Hi judges, I'll be demoing Cadence"}},
+	},
+	"es": {
+		{"Hospital (español)", []string{"Necesito agua", "Necesito ir al baño", "Me duele", "¿Puedes llamar a mi familia?"}},
+		{"Demo (español)", []string{"Hola jueces, voy a presentar Cadence"}},
+	},
 }
 
 // EnsurePerson creates the person if they don't exist, seeding the starter phrase groups. It reports whether it created them.
@@ -65,24 +74,88 @@ func (s *Store) EnsurePerson(ctx context.Context, id, name, locale string) (bool
 	if n, _ := res.RowsAffected(); n == 0 {
 		return false, nil
 	}
-	for gi, g := range starterGroups {
-		groupID := newID("pg")
-		if _, err := tx.ExecContext(ctx, "INSERT INTO phrase_group (id, person_id, name, sort_order) VALUES (?, ?, ?, ?)",
-			groupID, id, g.name, gi); err != nil {
-			return false, fmt.Errorf("seed group %s: %w", g.name, err)
-		}
-		for pi, text := range g.phrases {
-			if _, err := tx.ExecContext(ctx,
-				"INSERT INTO saved_phrase (id, group_id, text, locale, sort_order, created_at) VALUES (?, ?, ?, ?, ?, ?)",
-				newID("ph"), groupID, text, locale, pi, now()); err != nil {
-				return false, fmt.Errorf("seed phrase: %w", err)
-			}
-		}
+	if err := seedStarterGroups(ctx, tx, id, locale, 0); err != nil {
+		return false, err
 	}
 	if err := tx.Commit(); err != nil {
 		return false, fmt.Errorf("commit: %w", err)
 	}
 	return true, nil
+}
+
+// EnsureStarterPhrases adds the starter groups for locale after the person's other groups, unless the person
+// already has a phrase in that language (so they're added once, and a deleted starter group stays deleted
+// while other phrases in the language remain). It reports whether it added them.
+func (s *Store) EnsureStarterPhrases(ctx context.Context, personID, locale string) (bool, error) {
+	if len(starterGroups[locale]) == 0 {
+		return false, nil
+	}
+	tx, err := s.DB.BeginTx(ctx, nil)
+	if err != nil {
+		return false, fmt.Errorf("begin: %w", err)
+	}
+	defer tx.Rollback()
+	// Take the write lock first, so busy_timeout waits out concurrent clip writes. A transaction that reads
+	// first and writes later can't wait: SQLite fails its upgrade with SQLITE_BUSY straight away.
+	if _, err := tx.ExecContext(ctx, "UPDATE person SET locale = locale WHERE id = ?", personID); err != nil {
+		return false, fmt.Errorf("lock: %w", err)
+	}
+	var have bool
+	if err := tx.QueryRowContext(ctx, `
+		SELECT EXISTS (SELECT 1 FROM saved_phrase p JOIN phrase_group g ON g.id = p.group_id
+		WHERE g.person_id = ? AND p.locale = ?)`, personID, locale).Scan(&have); err != nil {
+		return false, fmt.Errorf("phrases in %s: %w", locale, err)
+	}
+	if have {
+		return false, nil
+	}
+	var next int
+	if err := tx.QueryRowContext(ctx, "SELECT COALESCE(MAX(sort_order) + 1, 0) FROM phrase_group WHERE person_id = ?",
+		personID).Scan(&next); err != nil {
+		return false, fmt.Errorf("group order: %w", err)
+	}
+	if err := seedStarterGroups(ctx, tx, personID, locale, next); err != nil {
+		return false, err
+	}
+	if err := tx.Commit(); err != nil {
+		return false, fmt.Errorf("commit: %w", err)
+	}
+	return true, nil
+}
+
+// seedStarterGroups inserts locale's starter groups (English for a locale without any) from sort order first.
+func seedStarterGroups(ctx context.Context, tx *sql.Tx, personID, locale string, first int) error {
+	groups, ok := starterGroups[locale]
+	if !ok {
+		groups, locale = starterGroups[DefaultLocale], DefaultLocale
+	}
+	for gi, g := range groups {
+		groupID := newID("pg")
+		if _, err := tx.ExecContext(ctx, "INSERT INTO phrase_group (id, person_id, name, sort_order) VALUES (?, ?, ?, ?)",
+			groupID, personID, g.name, first+gi); err != nil {
+			return fmt.Errorf("seed group %s: %w", g.name, err)
+		}
+		for pi, text := range g.phrases {
+			if _, err := tx.ExecContext(ctx,
+				"INSERT INTO saved_phrase (id, group_id, text, locale, sort_order, created_at) VALUES (?, ?, ?, ?, ?, ?)",
+				newID("ph"), groupID, text, locale, pi, now()); err != nil {
+				return fmt.Errorf("seed phrase: %w", err)
+			}
+		}
+	}
+	return nil
+}
+
+// SetPersonLocale records the language the person's conversations run in.
+func (s *Store) SetPersonLocale(ctx context.Context, personID, locale string) error {
+	res, err := s.DB.ExecContext(ctx, "UPDATE person SET locale = ? WHERE id = ?", locale, personID)
+	if err != nil {
+		return fmt.Errorf("set person locale: %w", err)
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return ErrNotFound
+	}
+	return nil
 }
 
 func (s *Store) PersonLocale(ctx context.Context, personID string) (string, error) {
