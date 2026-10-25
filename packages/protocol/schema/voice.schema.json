@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "voice",
+  "description": "Which voice replies are spoken in; sent on connect and after any change. cloned says whether a cloned voice exists, so the toggle can be disabled without one.",
+  "x-direction": "gateway → headset, phone",
+  "type": "object",
+  "properties": {
+    "active": {
+      "type": "string",
+      "enum": [
+        "cloned",
+        "default"
+      ]
+    },
+    "cloned": {
+      "type": "boolean"
+    }
+  },
+  "required": [
+    "active",
+    "cloned"
+  ],
+  "additionalProperties": false
+}

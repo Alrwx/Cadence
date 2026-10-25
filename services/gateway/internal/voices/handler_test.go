@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
@@ -12,32 +13,59 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/Alrwx/Cadence/services/gateway/internal/clips"
 	"github.com/Alrwx/Cadence/services/gateway/internal/models"
 	"github.com/Alrwx/Cadence/services/gateway/internal/store"
 )
 
+// fakeCloner is the model service: CreateVoice hands out mlx_voice_1, mlx_voice_2, ...
 type fakeCloner struct {
 	calls  int
 	sample models.VoiceSample
 	err    error
+	during func() // runs while "cloning", before CreateVoice returns
+
+	deleted   []string // DeleteVoice calls, in order
+	deleteErr error
 }
 
 func (f *fakeCloner) CreateVoice(_ context.Context, sample models.VoiceSample, _ string) (string, error) {
 	f.calls++
 	f.sample = sample
+	if f.during != nil {
+		f.during()
+	}
 	if f.err != nil {
 		return "", f.err
 	}
-	return "mlx_voice_1", nil
+	return fmt.Sprintf("mlx_voice_%d", f.calls), nil
 }
 
-type fakeSetter struct{ voice string }
+func (f *fakeCloner) DeleteVoice(_ context.Context, id string) error {
+	f.deleted = append(f.deleted, id)
+	return f.deleteErr
+}
+
+type fakeSetter struct {
+	voice     string
+	forgotten []string
+}
 
 func (f *fakeSetter) SetVoice(id string) { f.voice = id }
 
+func (f *fakeSetter) ForgetVoices(ids []string) {
+	f.forgotten = append(f.forgotten, ids...)
+	for _, id := range ids {
+		if f.voice == id {
+			f.voice = ""
+		}
+	}
+}
+
 func newHandler(t *testing.T) (*Handler, *fakeCloner, *fakeSetter) {
 	t.Helper()
-	st, err := store.Open(filepath.Join(t.TempDir(), "test.db"))
+	dir := t.TempDir()
+	st, err := store.Open(filepath.Join(dir, "test.db"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -45,8 +73,12 @@ func newHandler(t *testing.T) (*Handler, *fakeCloner, *fakeSetter) {
 	if _, err := st.EnsurePerson(context.Background(), "p1", "Pat", store.DefaultLocale); err != nil {
 		t.Fatal(err)
 	}
+	cc, err := clips.New(filepath.Join(dir, "clips"))
+	if err != nil {
+		t.Fatal(err)
+	}
 	fc, fs := &fakeCloner{}, &fakeSetter{}
-	return &Handler{Store: st, Models: fc, Voices: fs, PersonID: "p1", Locale: store.DefaultLocale}, fc, fs
+	return &Handler{Store: st, Models: fc, Voices: fs, Clips: cc, PersonID: "p1", Locale: store.DefaultLocale}, fc, fs
 }
 
 func postConsent(h *Handler, body string) *httptest.ResponseRecorder {
@@ -185,10 +217,28 @@ func TestUploadErrors(t *testing.T) {
 func TestUploadModelFailure(t *testing.T) {
 	h, fc, fs := newHandler(t)
 	consent := grantConsent(t, h)
-	fc.err = errors.New("POST /voices: 500")
-	rec := upload(h, []byte("x"), map[string]string{"consentId": consent, "sessionId": "demo"})
-	if rec.Code != http.StatusBadGateway || decode(t, rec)["code"] != "model_error" {
-		t.Fatalf("model failure: %d %s", rec.Code, rec.Body)
+	fields := map[string]string{"consentId": consent, "sessionId": "demo"}
+
+	for _, tc := range []struct {
+		name   string
+		err    error
+		status int
+		code   string
+	}{
+		// The model service rejected the sample (FastAPI answers 400 for bad audio, 422 for a bad form).
+		{"rejected sample", &models.StatusError{Method: "POST", Path: "/voices", Code: 400, Status: "400 Bad Request"}, 502, "model_error"},
+		{"model crashed", &models.StatusError{Method: "POST", Path: "/voices", Code: 500, Status: "500 Internal Server Error"}, 502, "model_error"},
+		// Still loading (503) or not running: the phone should say to retry, not to re-record.
+		{"still loading", fmt.Errorf("wrapped: %w", &models.StatusError{Method: "POST", Path: "/voices", Code: 503, Status: "503 Service Unavailable"}), 503, "models_unavailable"},
+		{"unreachable", fmt.Errorf("POST /voices: %w: connection refused", models.ErrUnavailable), 503, "models_unavailable"},
+		{"timed out", errors.New("POST /voices: context deadline exceeded"), 502, "model_error"},
+	} {
+		fc.err = tc.err
+		rec := upload(h, []byte("x"), fields)
+		body := decode(t, rec)
+		if rec.Code != tc.status || body["code"] != tc.code || body["message"] == "" {
+			t.Errorf("%s: %d %s, want %d %s", tc.name, rec.Code, rec.Body, tc.status, tc.code)
+		}
 	}
 	if _, ok, _ := h.Store.ActiveVoice(context.Background(), "p1"); ok || fs.voice != "" {
 		t.Fatal("a failed clone must not create or switch to a voice")

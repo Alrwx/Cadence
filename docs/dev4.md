@@ -63,19 +63,24 @@ Read this before working on `services/gateway`, `packages/protocol`, or the root
   - `orchestrator.go` still uses the constant `defaultVoiceID = "default"` and a fixed `personID` (see its `TODO(Dev 4)`).
   - After a voice upload, `o.voiceID` must switch to the new voice. Each `voiceID` is a separate clip-cache key, so the new voice needs its own warm-up.
 - [ ] **Re-synthesize saved and instant phrases when the voice changes.** This is mostly `warmClips` run against the new voice, followed by a fresh `phrases` list, since `audioReady` depends on the voice.
-- [ ] **Robot-voice contrast (demo step 6).** Decide how the presenter switches back to a generic voice. Probably the model service's built-in voice, plus a control on the phone or headset. No protocol event exists for it yet.
+- [x] **Robot-voice contrast (demo step 6), gateway side.** `voice.use` / `voice` events; `orchestrator/voice.go` keeps the cloned voice apart from the "use default" choice. A `/tts` 404 for the cloned voice falls back to `"default"` (`loseVoice`). The phone toggle is proposed in `docs/proposals/2026-10-24-robot-voice-toggle.md` (Dev 2).
 
 ### P1: M3/M4 polish
-- [ ] **Revoking consent deletes everything (§2):**
-  - the `voice_profile` row and the model service's copy (`DELETE /voices/{id}`)
-  - the `phrase_clip` rows for that voice, plus their files in `<DATA_DIR>/clips`
-  - Because the clip cache has no FK, this delete has to happen **in code**.
-- [ ] **Speculation on partials (§3).** `/suggest` currently fires only on `final`. Plan:
-  - debounce partials (~400 ms with no new words)
-  - call `/suggest` on the partial transcript
-  - cancel the call if the transcript changes
-- [ ] **Metrics.** The `metric` table exists but nothing writes to it. Log `/suggest` ms, `/tts` ms, selection → play latency, and selection type. Metrics only, never content. Needed for `docs/latency.md` and M4.
-- [ ] **`session` / `turn` rows.** Not written today. `turn.text` must stay NULL unless `store_chat` consent exists.
+- [x] **Revoking consent deletes everything (§2):** `DELETE /api/voices` (`voices.Handler.Revoke`) revokes the consents, then deletes the model service's copy, the `phrase_clip` rows and files, and the `voice_profile` rows, in an order that a retry can finish (see `store/voices.go` and `docs/decisions.md`). The phone's "Delete my voice" is proposed in `docs/proposals/2026-10-24-robot-voice-toggle.md`. Revoking `store_chat` (memories) is separate and not done here.
+- [x] **Speculation on partials (§3)** (`orchestrator/speculation.go`):
+  - In LISTENING, every partial (not just the rate-limited captions) restarts a debounce (400 ms, `Orchestrator.speculateAfter`). When it runs out with no new words, `/suggest` is called on the history plus the partial.
+  - New words cancel that call. A partial outside LISTENING, or the STT stream ending, drops the speculation.
+  - On the final, if it normalizes to the same words as the partial and the earlier turns are unchanged, the turn uses the speculative answer (waiting for it if it's still in flight). Otherwise the speculative call is cancelled and `/suggest` runs on the final as before. If the speculative call failed, the turn makes its own call. Matching rule: `docs/decisions.md`.
+  - Nothing is shown early. A speculative answer only becomes suggestions through final → `beginTurn` → SUGGESTING → `suggest` → `finishSuggesting`, so the stale-turn checks still apply.
+  - Metric `speculation` (`hit` / `miss` / `none` / `failed`), the same value as the detail on `final_to_suggestions`. Speculative calls are logged as `suggest` with a `spec:` prefix.
+- [x] **Metrics** (`orchestrator/metrics.go`, `store/metrics.go`). Rows in `metric`, never content:
+  - `suggest`: `/suggest` ms; detail `ok` / `error` / `timeout` / `cancelled` / `empty`
+  - `tts`: `/tts` ms; detail is why the clip was made: `suggestion` / `instant` / `saved` / `typed` / `warm`, with `:error` on failure
+  - `final_to_suggestions`: STT final → `suggestions` sent
+  - `select_to_play`: selection → `audio.play` sent; detail `<source>:cached` or `<source>:synthesized` (the cache-hit flag)
+  - `selection`: a count (no value); detail is the source
+  - Read them with `GET /api/metrics/summary[?since=<unix ms>]`: count, p50, p95 and max per name (detail `*`) and per (name, detail).
+- [x] **`session` / `turn` rows.** A `session` row is created (or reopened) on connect and gets `ended_at` when its last socket closes (`hub.DisconnectHandler`). A `turn` row is written for each final that starts a turn (`other`) and each reply sent to the phone (`user`). `store.AddTurn` checks `store_chat` consent itself, at write time, so `turn.text` is NULL without it.
 - [ ] **Error routing.** `sendError` always targets the headset. That's fine for phrase and suggestion errors; voice-upload errors are HTTP responses, so they don't go through it.
 - [ ] **Hotspot rehearsal 3× and a backup video (M4).** Both need the demo Mac.
 
@@ -135,10 +140,11 @@ Read this before working on `services/gateway`, `packages/protocol`, or the root
 | `internal/models/` | the model-service client (HTTP + STT WebSocket) |
 
 ### Rules that are easy to break
-- **Lock discipline.** `sessionState.mu` guards the machine, `turnID`, `suggestions` and `history`; methods named `...Locked` expect it held. `sttMu` guards only the STT stream; don't hold `mu` while dialing. Never call `s.Send` or `Broadcast` while holding `mu`.
+- **Lock discipline.** `sessionState.mu` guards the machine, `turnID`, `suggestions` and `history`; methods named `...Locked` expect it held. `sttMu` guards only the STT stream; don't hold `mu` while dialing. Never call `s.Send` or `Broadcast` while holding `mu`. `voiceMu` guards only the voice choice; change it through `updateVoice`, which refreshes the sessions in a goroutine (`refreshVoice`), so `SetVoice` never blocks on a socket. `spec.mu` (speculation) may be held while taking `mu`, never the other way round.
 - **Every state change goes through the machine:** `apply`, `beginTurn` or `finishSuggesting`. Async results must check that `turnID` is still current before acting (see `finishSuggesting` and `prepareSuggestion`).
 - **Model-service failures** send a recoverable `error` and leave instant phrases and typing working. Never block a WebSocket read loop on a model call; use a goroutine, as `suggest` and `prepareClip` do.
 - **No conversation text in SQLite without `store_chat` consent.** Metrics may always be stored; content may not. `audit_log` is the exception, since it's the safety record (§2).
+- **Metric, session and turn writes go through `o.record` / `o.recordTurn`**, which queue them for one writer goroutine. Never write them inline on the event path. A full queue drops the row (logged) rather than blocking. Tests call `o.writer.flush()` before reading the tables.
 - **The model service binds to 127.0.0.1.** Only the gateway is reachable from the network.
 - **Protocol changes** start in `packages/protocol/schema/*.schema.json`. Then run `pnpm protocol:gen` and add an example. Fields are additive and optional; never rename.
 - **Commits** say what changed and why, in plain words. No AI attribution trailers.

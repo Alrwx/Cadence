@@ -2,7 +2,9 @@
 package clips
 
 import (
+	"errors"
 	"fmt"
+	"io/fs"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -29,6 +31,17 @@ func (c *Cache) Put(id string, wav []byte) error {
 	}
 	if err := os.WriteFile(filepath.Join(c.Dir, id+".wav"), wav, 0o644); err != nil {
 		return fmt.Errorf("write clip %s: %w", id, err)
+	}
+	return nil
+}
+
+// Remove deletes a clip's file. A file that's already gone is not an error.
+func (c *Cache) Remove(id string) error {
+	if !validID.MatchString(id) {
+		return fmt.Errorf("invalid clip id %q", id)
+	}
+	if err := os.Remove(filepath.Join(c.Dir, id+".wav")); err != nil && !errors.Is(err, fs.ErrNotExist) {
+		return fmt.Errorf("remove clip %s: %w", id, err)
 	}
 	return nil
 }

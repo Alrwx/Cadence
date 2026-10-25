@@ -64,7 +64,7 @@ func (o *Orchestrator) sendPhrases(ctx context.Context, s *hub.Session) {
 
 // prepareClip synthesizes a newly saved phrase, then resends phrases so the headset sees audioReady.
 func (o *Orchestrator) prepareClip(s *hub.Session, text, locale string) {
-	ctx := context.Background()
+	ctx, _ := withTTSPurpose(context.Background(), s.ID, "saved")
 	if _, err := o.clipFor(ctx, text, locale); err != nil {
 		slog.Warn("prepare saved phrase", "session", s.ID, "err", err)
 		return
@@ -85,7 +85,7 @@ func (o *Orchestrator) warmClips() {
 }
 
 func (o *Orchestrator) warmOnce(voice string) {
-	ctx := context.Background()
+	ctx, _ := withTTSPurpose(context.Background(), "", "warm")
 
 	type item struct{ text, locale string }
 	var todo []item
