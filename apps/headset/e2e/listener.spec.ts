@@ -40,11 +40,12 @@ test("a reply beside the listener is selected by dwell", async ({ page }) => {
 
 test("Clear in Settings puts the replies back on the panel", async ({ page }) => {
   const onPanel = await replyToYes(page);
+  await lookAt(page, "More");
   await lookAt(page, "Settings");
   await placeListener(page, "Place");
   await page.waitForFunction(() => window.cadence.useListener.getState().spot !== null);
   await lookAt(page, "Clear");
-  await lookAt(page, "Done");
+  await lookAt(page, "Back");
   await expect.poll(() => replyToYes(page)).toBeCloseTo(onPanel, 2);
 });
 
