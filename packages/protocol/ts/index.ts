@@ -26,6 +26,17 @@ export interface ComposeSubmitData {
   text: string;
 }
 
+/** (Stretch) Current consents; sent on connect and after any change. (gateway → headset) */
+export interface ConsentData {
+  storeChat: boolean;
+}
+
+/** (Stretch) Grant or revoke a consent; revoking store_chat deletes every memory. (headset → gateway) */
+export interface ConsentSetData {
+  kind: "store_chat";
+  granted: boolean;
+}
+
 /** (Stretch) Use saved conversations as context for this session. (headset → gateway) */
 export interface ConversationAttachData {
   conversationIds: string[];
@@ -70,6 +81,25 @@ export interface HelloData {
 export interface InstantData {
   phraseId: string;
 }
+
+export interface MemoriesItem {
+  id: string;
+  summary: string;
+  createdAt: number;
+}
+
+/** (Stretch) Quick memories, newest first; sent on connect and after any change. (gateway → headset) */
+export interface MemoriesData {
+  items: MemoriesItem[];
+}
+
+/** (Stretch) Delete one quick memory. (headset → gateway) */
+export interface MemoryDeleteData {
+  memoryId: string;
+}
+
+/** (Stretch) Remember the last ~60 s as a short memory; rejected without store_chat consent. (headset → gateway) */
+export type MemorySaveData = Record<string, never>;
 
 /** User tapped Start on the phone; audio playback is allowed. (phone → gateway) */
 export type PhoneUnlockData = Record<string, never>;
@@ -167,6 +197,8 @@ export const EVENT_TYPES = [
   "cancel",
   "compose.start",
   "compose.submit",
+  "consent",
+  "consent.set",
   "conversation.attach",
   "conversation.delete",
   "conversation.save",
@@ -174,6 +206,9 @@ export const EVENT_TYPES = [
   "error",
   "hello",
   "instant",
+  "memories",
+  "memory.delete",
+  "memory.save",
   "phone.unlock",
   "phrase.delete",
   "phrase.group.delete",
@@ -197,6 +232,8 @@ export interface EventDataMap {
   "cancel": CancelData;
   "compose.start": ComposeStartData;
   "compose.submit": ComposeSubmitData;
+  "consent": ConsentData;
+  "consent.set": ConsentSetData;
   "conversation.attach": ConversationAttachData;
   "conversation.delete": ConversationDeleteData;
   "conversation.save": ConversationSaveData;
@@ -204,6 +241,9 @@ export interface EventDataMap {
   "error": ErrorData;
   "hello": HelloData;
   "instant": InstantData;
+  "memories": MemoriesData;
+  "memory.delete": MemoryDeleteData;
+  "memory.save": MemorySaveData;
   "phone.unlock": PhoneUnlockData;
   "phrase.delete": PhraseDeleteData;
   "phrase.group.delete": PhraseGroupDeleteData;

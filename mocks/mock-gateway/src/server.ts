@@ -8,6 +8,8 @@ import {
   isEventType,
   PROTOCOL_VERSION,
   type CadenceEvent,
+  type ConversationsItem,
+  type MemoriesItem,
   type EventDataMap,
   type EventType,
   type PhrasesGroup,
@@ -45,6 +47,11 @@ interface Session {
   turnId: string;
   clipTexts: Map<string, string>;
   groups: PhrasesGroup[];
+  conversations: ConversationsItem[];
+  memories: MemoriesItem[];
+  storeChat: boolean;
+  /** What was said lately, for "Remember this". */
+  heard: { text: string; at: number }[];
   unlocked: boolean;
 }
 
@@ -85,6 +92,17 @@ function getSession(id: string): Session {
         },
         { id: "pg_home", name: "Home", items: [{ id: "ph_love", text: "I love you", audioReady: true }] },
       ],
+      conversations: [
+        {
+          id: "cv_lee",
+          label: "Dr. Lee – last visit",
+          startedAt: Date.now() - 7 * 24 * 3600_000,
+          summary: "Started lisinopril for blood pressure; check back in a week about dizziness.",
+        },
+      ],
+      memories: [{ id: "mem_visit", summary: "The nurse said the doctor visits at 3 pm.", createdAt: Date.now() - 3600_000 }],
+      storeChat: false,
+      heard: [],
       unlocked: false,
     };
     sessions.set(id, s);
@@ -102,11 +120,45 @@ function sendPhrases(s: Session, to: Target): void {
   send(s, to, "phrases", { groups: s.groups });
 }
 
+const MEMORY_WINDOW_MS = 60_000;
+const MEMORY_DELAY_MS = 600;
+const MEMORY_CHARS = 100;
+
+function hear(s: Session, text: string): void {
+  s.heard = s.heard.filter((h) => Date.now() - h.at <= MEMORY_WINDOW_MS);
+  s.heard.push({ text, at: Date.now() });
+}
+
+function sendMemories(s: Session): void {
+  send(s, "headset", "memories", { items: s.memories });
+}
+
+function saveMemory(s: Session, from: Role): void {
+  if (!s.storeChat) {
+    send(s, from, "error", { code: "no_consent", message: "Turn on Save memories in Settings first.", recoverable: true });
+    return;
+  }
+  const recent = s.heard.filter((h) => Date.now() - h.at <= MEMORY_WINDOW_MS).map((h) => h.text);
+  if (!recent.length) {
+    send(s, from, "error", { code: "nothing_heard", message: "Nothing to remember from the last minute.", recoverable: true });
+    return;
+  }
+  const joined = recent.join(" ");
+  const summary = joined.length > MEMORY_CHARS ? `${joined.slice(0, MEMORY_CHARS)}…` : joined;
+  setTimeout(() => {
+    s.memories.unshift({ id: newId("mem"), summary, createdAt: Date.now() });
+    sendMemories(s);
+  }, MEMORY_DELAY_MS);
+}
+
 function runScenario(s: Session): void {
   let at = 0;
   for (const step of scenario.steps) {
     at += step.afterMs;
-    setTimeout(() => send(s, step.to, step.type, step.data), at);
+    setTimeout(() => {
+      if (step.type === "transcript.final") hear(s, (step.data as EventDataMap["transcript.final"]).text);
+      send(s, step.to, step.type, step.data);
+    }, at);
   }
   if (scenario.disconnectAfterMs !== undefined) {
     setTimeout(() => {
@@ -118,6 +170,7 @@ function runScenario(s: Session): void {
 
 function speak(s: Session, text: string, source: EventDataMap["audio.play"]["source"]): void {
   send(s, "all", "state", { state: "SPEAKING" });
+  hear(s, text);
   const clipId = `mock_${++clipCounter}`;
   s.clipTexts.set(clipId, text);
   setTimeout(() => send(s, "phone", "audio.play", { clipId, url: `/clips/${clipId}.wav`, text, source }), scenario.ttsDelayMs);
@@ -188,6 +241,37 @@ function handle(s: Session, from: Role, event: CadenceEvent): void {
       for (const g of s.groups) g.items = g.items.filter((p) => p.id !== event.data.phraseId);
       sendPhrases(s, "all");
       break;
+    case "conversation.save":
+      s.conversations.push({
+        id: newId("cv"),
+        label: event.data.label,
+        startedAt: Date.now(),
+        summary: "(mock summary of this conversation)",
+      });
+      send(s, "headset", "conversations", { items: s.conversations });
+      break;
+    case "conversation.delete":
+      s.conversations = s.conversations.filter((c) => c.id !== event.data.conversationId);
+      send(s, "headset", "conversations", { items: s.conversations });
+      break;
+    case "conversation.attach":
+      console.log("mock: attached conversations", event.data.conversationIds);
+      break;
+    case "memory.save":
+      saveMemory(s, from);
+      break;
+    case "memory.delete":
+      s.memories = s.memories.filter((m) => m.id !== event.data.memoryId);
+      sendMemories(s);
+      break;
+    case "consent.set":
+      s.storeChat = event.data.granted;
+      if (!s.storeChat) {
+        s.memories = [];
+        sendMemories(s);
+      }
+      send(s, "headset", "consent", { storeChat: s.storeChat });
+      break;
     case "compose.start":
       send(s, "all", "state", { state: "COMPOSING" });
       break;
@@ -201,6 +285,77 @@ function handle(s: Session, from: Role, event: CadenceEvent): void {
     default:
       console.log("mock: not handled", event.type);
   }
+}
+
+// Consent + voice upload, the shape proposed in docs/proposals/2026-10-24-voice-upload-endpoints.md.
+const MAX_SAMPLE_BYTES = 25 * 1024 * 1024;
+const VOICE_DELAY_MS = Number(process.env.VOICE_DELAY_MS ?? 1500);
+const consents = new Set<string>();
+let voiceCounter = 0;
+
+function json(res: ServerResponse, status: number, body: unknown): void {
+  res.writeHead(status, { "Content-Type": "application/json" }).end(JSON.stringify(body));
+}
+
+function readBody(req: IncomingMessage, limit: number): Promise<Buffer | null> {
+  return new Promise((resolve, reject) => {
+    const chunks: Buffer[] = [];
+    let size = 0;
+    req.on("data", (chunk: Buffer) => {
+      size += chunk.length;
+      if (size <= limit) chunks.push(chunk);
+    });
+    req.on("end", () => resolve(size > limit ? null : Buffer.concat(chunks)));
+    req.on("error", reject);
+  });
+}
+
+/** Pulls a plain text field out of a multipart body. Good enough for a mock; the real gateway uses a parser. */
+function formField(body: Buffer, name: string): string | undefined {
+  const match = new RegExp(`name="${name}"\\r\\n\\r\\n([^\\r]*)\\r\\n`).exec(body.toString("latin1"));
+  return match?.[1];
+}
+
+async function handleApi(req: IncomingMessage, res: ServerResponse): Promise<void> {
+  if (req.method === "POST" && req.url === "/api/consent") {
+    const body = await readBody(req, 64 * 1024);
+    const data = JSON.parse(body?.toString() || "{}") as Record<string, unknown>;
+    const missing = ["sessionId", "kind", "voiceOwner", "statement"].filter(
+      (k) => typeof data[k] !== "string" || !(data[k] as string).trim(),
+    );
+    if (missing.length) return json(res, 400, { code: "bad_request", message: `Missing ${missing.join(", ")}.` });
+    const consentId = `c_${consents.size + 1}`;
+    consents.add(consentId);
+    console.log(`consent ${consentId}: ${String(data.voiceOwner)} (${String(data.statement)})`);
+    return json(res, 201, { consentId });
+  }
+  if (req.method === "POST" && req.url === "/api/voices") {
+    if (!req.headers["content-type"]?.startsWith("multipart/form-data")) {
+      return json(res, 400, { code: "bad_request", message: "Expected multipart/form-data." });
+    }
+    const body = await readBody(req, MAX_SAMPLE_BYTES);
+    if (!body) return json(res, 413, { code: "too_large", message: "The sample is over 25 MB." });
+    const consentId = formField(body, "consentId");
+    if (!formField(body, "sessionId") || !body.includes('name="audio"')) {
+      return json(res, 400, { code: "bad_request", message: "Missing audio or sessionId." });
+    }
+    if (!consentId || !consents.has(consentId)) {
+      return json(res, 403, { code: "no_consent", message: "No consent record for this voice." });
+    }
+    await new Promise((r) => setTimeout(r, VOICE_DELAY_MS)); // stands in for transcription + voice prompt
+    const voiceId = `v_${++voiceCounter}`;
+    console.log(`voice ${voiceId} from ${body.length} bytes (consent ${consentId})`);
+    return json(res, 201, { voiceId });
+  }
+  json(res, 404, { code: "not_found", message: "Unknown API route." });
+}
+
+function handleHttp(req: IncomingMessage, res: ServerResponse): void {
+  if (req.url?.startsWith("/api/")) {
+    handleApi(req, res).catch((err: unknown) => json(res, 400, { code: "bad_request", message: String(err) }));
+    return;
+  }
+  serveClip(req, res);
 }
 
 function serveClip(req: IncomingMessage, res: ServerResponse): void {
@@ -217,8 +372,8 @@ const cert = resolve(root, process.env.TLS_CERT ?? "certs/dev.pem");
 const key = resolve(root, process.env.TLS_KEY ?? "certs/dev-key.pem");
 const tls = existsSync(cert) && existsSync(key);
 const server = tls
-  ? createHttps({ cert: readFileSync(cert), key: readFileSync(key) }, serveClip)
-  : createHttp(serveClip);
+  ? createHttps({ cert: readFileSync(cert), key: readFileSync(key) }, handleHttp)
+  : createHttp(handleHttp);
 
 const wss = new WebSocketServer({ server, path: "/ws" });
 wss.on("connection", (ws, req) => {
@@ -234,6 +389,11 @@ wss.on("connection", (ws, req) => {
   console.log(`connected ${role} (session ${sessionId})`);
   send(s, role, "state", { state: "IDLE" });
   sendPhrases(s, role);
+  if (role === "headset") {
+    send(s, "headset", "conversations", { items: s.conversations });
+    send(s, "headset", "consent", { storeChat: s.storeChat });
+    sendMemories(s);
+  }
 
   ws.on("message", (raw, isBinary) => {
     if (isBinary) return; // phone mic frames; the mock ignores audio

@@ -8,7 +8,8 @@
     "build": "vite build",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
-    "test": "tsx --test \"src/**/*.test.ts\""
+    "test": "tsx --test \"src/**/*.test.ts\"",
+    "e2e": "playwright test"
   },
   "dependencies": {
     "@cadence/protocol": "workspace:*",
@@ -22,12 +23,15 @@
     "zustand": "^5.0.16"
   },
   "devDependencies": {
+    "@iwer/devui": "1.1.2",
+    "@playwright/test": "1.64.1",
     "@types/node": "^22.20.5",
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
     "@types/three": "^0.186.0",
     "@types/webxr": "^0.5.24",
     "@vitejs/plugin-react": "^6.1.2",
+    "iwer": "2.7.0",
     "tsx": "^4.23.15",
     "typescript": "^5.9.3",
     "vite": "^8.3.5"

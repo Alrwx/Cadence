@@ -22,6 +22,8 @@ const (
 	TypeCancel               = "cancel"
 	TypeComposeStart         = "compose.start"
 	TypeComposeSubmit        = "compose.submit"
+	TypeConsent              = "consent"
+	TypeConsentSet           = "consent.set"
 	TypeConversationAttach   = "conversation.attach"
 	TypeConversationDelete   = "conversation.delete"
 	TypeConversationSave     = "conversation.save"
@@ -29,6 +31,9 @@ const (
 	TypeError                = "error"
 	TypeHello                = "hello"
 	TypeInstant              = "instant"
+	TypeMemories             = "memories"
+	TypeMemoryDelete         = "memory.delete"
+	TypeMemorySave           = "memory.save"
 	TypePhoneUnlock          = "phone.unlock"
 	TypePhraseDelete         = "phrase.delete"
 	TypePhraseGroupDelete    = "phrase.group.delete"
@@ -68,6 +73,17 @@ type ComposeStartData struct {
 // ComposeSubmitData: User submitted a typed reply. (headset → gateway)
 type ComposeSubmitData struct {
 	Text string `json:"text"`
+}
+
+// ConsentData: (Stretch) Current consents; sent on connect and after any change. (gateway → headset)
+type ConsentData struct {
+	StoreChat bool `json:"storeChat"`
+}
+
+// ConsentSetData: (Stretch) Grant or revoke a consent; revoking store_chat deletes every memory. (headset → gateway)
+type ConsentSetData struct {
+	Kind    string `json:"kind"`
+	Granted bool   `json:"granted"`
 }
 
 // ConversationAttachData: (Stretch) Use saved conversations as context for this session. (headset → gateway)
@@ -113,6 +129,26 @@ type HelloData struct {
 // InstantData: User fired an instant gesture phrase. (headset → gateway)
 type InstantData struct {
 	PhraseID string `json:"phraseId"`
+}
+
+type MemoriesItem struct {
+	ID        string `json:"id"`
+	Summary   string `json:"summary"`
+	CreatedAt int64  `json:"createdAt"`
+}
+
+// MemoriesData: (Stretch) Quick memories, newest first; sent on connect and after any change. (gateway → headset)
+type MemoriesData struct {
+	Items []MemoriesItem `json:"items"`
+}
+
+// MemoryDeleteData: (Stretch) Delete one quick memory. (headset → gateway)
+type MemoryDeleteData struct {
+	MemoryID string `json:"memoryId"`
+}
+
+// MemorySaveData: (Stretch) Remember the last ~60 s as a short memory; rejected without store_chat consent. (headset → gateway)
+type MemorySaveData struct {
 }
 
 // PhoneUnlockData: User tapped Start on the phone; audio playback is allowed. (phone → gateway)
@@ -219,6 +255,10 @@ func NewData(eventType string) (any, bool) {
 		return &ComposeStartData{}, true
 	case TypeComposeSubmit:
 		return &ComposeSubmitData{}, true
+	case TypeConsent:
+		return &ConsentData{}, true
+	case TypeConsentSet:
+		return &ConsentSetData{}, true
 	case TypeConversationAttach:
 		return &ConversationAttachData{}, true
 	case TypeConversationDelete:
@@ -233,6 +273,12 @@ func NewData(eventType string) (any, bool) {
 		return &HelloData{}, true
 	case TypeInstant:
 		return &InstantData{}, true
+	case TypeMemories:
+		return &MemoriesData{}, true
+	case TypeMemoryDelete:
+		return &MemoryDeleteData{}, true
+	case TypeMemorySave:
+		return &MemorySaveData{}, true
 	case TypePhoneUnlock:
 		return &PhoneUnlockData{}, true
 	case TypePhraseDelete:
