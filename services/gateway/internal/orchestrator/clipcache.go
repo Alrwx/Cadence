@@ -18,7 +18,7 @@ type flight struct {
 // clipFor returns a clip of text in the current voice and locale, synthesizing it only if no clip exists yet.
 // Concurrent requests for the same key share one /tts call (AGENTS(GH).md §7: never synthesize a phrase twice).
 func (o *Orchestrator) clipFor(ctx context.Context, text, locale string) (string, error) {
-	voice := o.voiceID
+	voice := o.voice()
 	id, ok, err := o.store.ClipID(ctx, voice, locale, text)
 	if err != nil {
 		return "", err

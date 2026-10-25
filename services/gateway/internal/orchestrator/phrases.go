@@ -45,7 +45,7 @@ func (o *Orchestrator) onPhraseEvent(ctx context.Context, s *hub.Session, ss *se
 
 // sendPhrases sends the person's saved phrases to the headset.
 func (o *Orchestrator) sendPhrases(ctx context.Context, s *hub.Session) {
-	groups, err := o.store.PhraseGroups(ctx, o.personID, o.voiceID)
+	groups, err := o.store.PhraseGroups(ctx, o.personID, o.voice())
 	if err != nil {
 		slog.Error("load phrases", "session", s.ID, "err", err)
 		o.sendError(ctx, s, "storage_failed", "Couldn't load saved phrases.")
@@ -73,12 +73,18 @@ func (o *Orchestrator) prepareClip(s *hub.Session, text, locale string) {
 }
 
 // warmClips pre-synthesizes every saved and instant phrase that has no clip in the current voice yet,
-// so they play as fast as the instant tier. One warm-up runs at a time.
-func (o *Orchestrator) warmClips(s *hub.Session) {
-	if !o.warming.CompareAndSwap(false, true) {
-		return
+// so they play as fast as the instant tier, then refreshes every connected headset's phrases.
+// One warm-up runs at a time; a request that arrives during one (say, after a voice change) runs another after it.
+func (o *Orchestrator) warmClips() {
+	o.rewarm.Store(true)
+	for o.rewarm.Load() && o.warming.CompareAndSwap(false, true) {
+		o.rewarm.Store(false)
+		o.warmOnce(o.voice())
+		o.warming.Store(false)
 	}
-	defer o.warming.Store(false)
+}
+
+func (o *Orchestrator) warmOnce(voice string) {
 	ctx := context.Background()
 
 	type item struct{ text, locale string }
@@ -86,7 +92,7 @@ func (o *Orchestrator) warmClips(s *hub.Session) {
 	for _, text := range instantText {
 		todo = append(todo, item{text, o.locale})
 	}
-	groups, err := o.store.PhraseGroups(ctx, o.personID, o.voiceID)
+	groups, err := o.store.PhraseGroups(ctx, o.personID, voice)
 	if err != nil {
 		slog.Error("warm clips", "err", err)
 		return
@@ -101,7 +107,10 @@ func (o *Orchestrator) warmClips(s *hub.Session) {
 
 	made := 0
 	for _, it := range todo {
-		if _, ok, _ := o.store.ClipID(ctx, o.voiceID, it.locale, it.text); ok {
+		if voice != o.voice() {
+			break // the voice changed mid warm-up; the next round warms the new one
+		}
+		if _, ok, _ := o.store.ClipID(ctx, voice, it.locale, it.text); ok {
 			continue
 		}
 		if _, err := o.clipFor(ctx, it.text, it.locale); err != nil {
@@ -112,8 +121,10 @@ func (o *Orchestrator) warmClips(s *hub.Session) {
 		made++
 	}
 	if made > 0 {
-		slog.Info("warmed clips", "count", made)
-		o.sendPhrases(ctx, s)
+		slog.Info("warmed clips", "count", made, "voice", voice)
+		for _, s := range o.hubSessions() {
+			o.sendPhrases(ctx, s)
+		}
 	}
 }
 

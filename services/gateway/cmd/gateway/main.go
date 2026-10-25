@@ -18,6 +18,7 @@ import (
 	"github.com/Alrwx/Cadence/services/gateway/internal/models"
 	"github.com/Alrwx/Cadence/services/gateway/internal/orchestrator"
 	"github.com/Alrwx/Cadence/services/gateway/internal/store"
+	"github.com/Alrwx/Cadence/services/gateway/internal/voices"
 )
 
 const defaultPersonID = "person_default"
@@ -55,12 +56,26 @@ func run() error {
 		return err
 	}
 
-	h := hub.New(orchestrator.New(st, mc, cc, defaultPersonID, locale))
+	orch := orchestrator.New(st, mc, cc, defaultPersonID, locale)
+	// Speak in the voice recorded on the phone, if there is one with consent still granted.
+	if voiceID, ok, err := st.ActiveVoice(ctx, defaultPersonID); err != nil {
+		return err
+	} else if ok {
+		orch.SetVoice(voiceID)
+		slog.Info("using recorded voice", "model_voice", voiceID)
+	}
+	h := hub.New(orch)
 	h.OriginPatterns = []string{"*:5173", "*:5174"} // Vite dev servers
 
 	mux := http.NewServeMux()
 	mux.Handle("GET /ws", h)
 	mux.Handle("GET /clips/{file}", cc)
+	vh := &voices.Handler{
+		Store: st, Models: mc, Voices: orch, PersonID: defaultPersonID, Locale: locale,
+		OriginPatterns: h.OriginPatterns, // same rule as /ws
+	}
+	mux.HandleFunc("POST /api/consent", vh.Consent)
+	mux.HandleFunc("POST /api/voices", vh.Upload)
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, r *http.Request) {
 		health, err := mc.Health(r.Context())
 		if err != nil {

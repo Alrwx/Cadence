@@ -34,6 +34,13 @@ type fakeModels struct {
 
 	mu          sync.Mutex
 	suggestReqs []models.SuggestRequest
+	ttsVoices   map[string]int // /tts calls per voiceId
+}
+
+func (f *fakeModels) ttsCallsFor(voice string) int {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.ttsVoices[voice]
 }
 
 const fakeUtterance = "How are you feeling today?"
@@ -48,6 +55,16 @@ func (f *fakeModels) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	switch r.URL.Path {
 	case "/tts":
 		f.ttsCalls.Add(1)
+		var req struct {
+			VoiceID string `json:"voiceId"`
+		}
+		_ = json.NewDecoder(r.Body).Decode(&req)
+		f.mu.Lock()
+		if f.ttsVoices == nil {
+			f.ttsVoices = map[string]int{}
+		}
+		f.ttsVoices[req.VoiceID]++
+		f.mu.Unlock()
 		time.Sleep(f.delay)
 		w.Header().Set("Content-Type", "audio/wav")
 		_, _ = w.Write([]byte("RIFF-fake-wav"))
@@ -428,7 +445,7 @@ func TestSuggestionPipelineEndToEnd(t *testing.T) {
 
 	// Picking one plays the clip that was already made.
 	pick := sugg.Items[1]
-	cached, ok, err := o.store.ClipID(context.Background(), o.voiceID, o.locale, pick.Text)
+	cached, ok, err := o.store.ClipID(context.Background(), o.voice(), o.locale, pick.Text)
 	if err != nil || !ok {
 		t.Fatalf("no cached clip for %q: ok=%v err=%v", pick.Text, ok, err)
 	}
@@ -570,5 +587,47 @@ func TestSTTDownKeepsInstantPhrasesWorking(t *testing.T) {
 	phone.expect(protocol.TypeAudioPlay, &play, nil)
 	if play.Text != "Yes" {
 		t.Fatalf("audio.play = %+v", play)
+	}
+}
+
+// TestSetVoiceRewarmsAndSpeaksInTheNewVoice: after a voice is recorded on the phone, the headset's phrases
+// show as not ready, get re-synthesized in the new voice, and everything spoken after uses it.
+func TestSetVoiceRewarmsAndSpeaksInTheNewVoice(t *testing.T) {
+	fm := &fakeModels{}
+	o := newTestOrchestrator(t, fm)
+	srv := httptest.NewServer(hub.New(o))
+	t.Cleanup(srv.Close)
+
+	headset := dial(t, srv.URL, "headset")
+	var phrases protocol.PhrasesData
+	headset.expect(protocol.TypePhrases, &phrases, func() bool { return allReady(&phrases) })
+	perVoice := len(instantText) + 5 // instant phrases + starter saved phrases
+
+	o.SetVoice("mlx_cloned")
+	headset.expect(protocol.TypePhrases, &phrases, func() bool { return !allReady(&phrases) })
+	headset.expect(protocol.TypePhrases, &phrases, func() bool { return allReady(&phrases) })
+	if got := fm.ttsCallsFor("mlx_cloned"); got != perVoice {
+		t.Fatalf("re-warm made %d clips in the new voice, want %d", got, perVoice)
+	}
+	if got := fm.ttsCallsFor(defaultVoiceID); got != perVoice {
+		t.Fatalf("default voice clips = %d, want %d (no extra synthesis)", got, perVoice)
+	}
+
+	phone := dial(t, srv.URL, "phone")
+	phone.send(protocol.TypePhoneUnlock, protocol.PhoneUnlockData{})
+	phone.expectState("LISTENING")
+	headset.send(protocol.TypeComposeSubmit, protocol.ComposeSubmitData{Text: "This is my own voice"})
+	var play protocol.AudioPlayData
+	phone.expect(protocol.TypeAudioPlay, &play, nil)
+	if id, ok, _ := o.store.ClipID(context.Background(), "mlx_cloned", o.locale, "This is my own voice"); !ok || id != play.ClipID {
+		t.Fatalf("typed reply clip %s not in the new voice (found %q, %v)", play.ClipID, id, ok)
+	}
+
+	// Setting the same voice again is a no-op.
+	before := fm.ttsCalls.Load()
+	o.SetVoice("mlx_cloned")
+	time.Sleep(100 * time.Millisecond)
+	if fm.ttsCalls.Load() != before {
+		t.Fatal("re-setting the same voice synthesized clips again")
 	}
 }
