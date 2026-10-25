@@ -10,8 +10,11 @@ Phrases they often use:
 Earlier conversations they chose to keep:
 {context}
 
+Things they asked to remember:
+{memories}
+
 Rules:
-- First person, ready to be spoken aloud, at most 12 words each.
+- First person, ready to be spoken aloud, at most 12 words each, in {language}.
 - Make the replies different from each other, e.g. an answer, a feeling, a question back.
 - If the last thing said was a yes/no question, make one reply a clear yes or no.
 - Output only a JSON array, nothing else: [{{"text": "...", "kind": "statement" | "question" | "yes_no"}}]

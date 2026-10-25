@@ -1,8 +1,8 @@
 """Request/response types for §6.2. services/gateway/internal/models/client.go mirrors these by hand."""
 
-from typing import Literal
+from typing import Annotated, Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, StringConstraints
 
 Status = Literal["ready", "loading", "error"]
 ReplyKind = Literal["statement", "question", "yes_no"]
@@ -37,6 +37,8 @@ class SuggestRequest(BaseModel):
     history: list[Turn]
     style: Style = Style()
     context: list[ContextItem] = []
+    memories: list[str] = []
+    locale: str = "en"
     n: int = Field(default=3, ge=1, le=5)
 
 
@@ -53,7 +55,8 @@ class SuggestResponse(BaseModel):
 
 class TtsRequest(BaseModel):
     voiceId: str
-    text: str
+    text: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1)]
+    locale: str = "en"
 
 
 class VoiceCreated(BaseModel):
@@ -62,6 +65,7 @@ class VoiceCreated(BaseModel):
 
 class SummarizeRequest(BaseModel):
     turns: list[Turn]
+    locale: str = "en"
 
 
 class SummarizeResponse(BaseModel):

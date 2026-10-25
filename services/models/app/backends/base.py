@@ -1,30 +1,50 @@
-"""Backend interfaces. Swapping MLX (Mac) for CUDA (3080 server) is a config change, never a code change."""
+"""Backend interfaces. Swapping MLX (Mac) for CUDA (3080 server) is a config change, never a code change.
 
-from collections.abc import AsyncIterator
-from typing import Literal, Protocol
+The engines are deliberately small. Streaming, VAD, voice storage, batching and WAV encoding are shared code
+(stt_stream.py, tts.py), so a new backend only has to load a model and run it.
+"""
+
+from typing import Any, Protocol
+
+import numpy as np
 
 from app.schemas import ContextItem, Reply, Style, Turn
 
 
-class SttBackend(Protocol):
-    def transcribe(self, frames: AsyncIterator[bytes]) -> AsyncIterator[tuple[Literal["partial", "final"], str]]:
-        """Consume PCM16 16 kHz mono frames; yield (kind, text) as speech is recognized."""
+class SttEngine(Protocol):
+    def load(self) -> None:
+        """Load the model and run one warm-up pass. Called once, off the event loop."""
+        ...
+
+    def transcribe(self, audio: np.ndarray, locale: str) -> str:
+        """Transcribe one utterance: mono float32 at 16 kHz, at most 30 s. Always called from the same thread."""
         ...
 
 
 class SuggestBackend(Protocol):
-    def suggest(self, history: list[Turn], style: Style, context: list[ContextItem], n: int) -> list[Reply]: ...
+    def load(self) -> None: ...
 
-    def summarize(self, turns: list[Turn]) -> str: ...
+    def suggest(
+        self, history: list[Turn], style: Style, context: list[ContextItem], memories: list[str], locale: str, n: int
+    ) -> list[Reply]: ...
+
+    def summarize(self, turns: list[Turn], locale: str) -> str: ...
 
 
-class TtsBackend(Protocol):
-    def create_voice(self, audio: bytes, transcript: str) -> str:
-        """Build and cache a voice prompt from a reference clip; return its voiceId."""
+class TtsEngine(Protocol):
+    sample_rate: int
+
+    def load(self) -> None:
+        """Called on the TTS worker thread, like make_prompt and generate."""
         ...
 
-    def delete_voice(self, voice_id: str) -> None: ...
+    def make_prompt(self, ref_audio: np.ndarray, ref_text: str) -> Any:
+        """Build a reusable voice prompt from a reference clip (mono float32 at sample_rate) and its transcript."""
+        ...
 
-    def synthesize(self, voice_id: str, text: str) -> bytes:
-        """Return WAV bytes."""
+    def generate(self, prompt: Any, texts: list[str], language: str, max_tokens: int) -> list[np.ndarray]:
+        """Speak each text in the prompt's voice; one mono float32 array per text, in order.
+
+        language is a Qwen3-TTS language name ("English") or "Auto".
+        """
         ...
