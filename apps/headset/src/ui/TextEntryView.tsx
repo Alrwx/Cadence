@@ -4,7 +4,7 @@ import { useState } from "react";
 import { rememberSpeech, send } from "../session.ts";
 import { t } from "../strings.ts";
 import { Button3D } from "./Button3D.tsx";
-import { ACCENT, ignoreRays } from "./glass.ts";
+import { ACCENT, TEXT_HALO, ignoreRays } from "./glass.ts";
 import { GlassPanel } from "./GlassPanel.tsx";
 import { addWord, backspace, finish, typeKey } from "./textEntry.ts";
 import { useView } from "./views.ts";
@@ -68,9 +68,7 @@ function Field({ text }: { text: string }) {
           anchorY="middle"
           color="white"
           fillOpacity={text ? 1 : 0.55}
-          outlineBlur={0.004}
-          outlineColor="black"
-          outlineOpacity={0.5}
+          {...TEXT_HALO}
           // Each character's caret box is [left, right, bottom, top]; the last right edge follows a typed space too.
           onSync={({ textRenderInfo: info }: TextInfo) => {
             const p = text ? info?.caretPositions : undefined;

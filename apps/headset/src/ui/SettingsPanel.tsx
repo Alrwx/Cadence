@@ -10,6 +10,7 @@ import { useSettings, type InputMode } from "../settings.ts";
 import { t } from "../strings.ts";
 import { BackButton, HEADER_Y, Segmented, segmentedWidth, type SegmentedOption } from "./controls.tsx";
 import { GlassPanel } from "./GlassPanel.tsx";
+import { TEXT_HALO } from "./glass.ts";
 
 const CARD_WIDTH = 0.76;
 const CARD_HEIGHT = 0.068;
@@ -19,7 +20,6 @@ const TOP_CARD_Y = 0.26;
 const LABEL_X = -0.355;
 /** Where every row's choices end, so their right edges line up (meters). */
 const TRACK_RIGHT = 0.368;
-const HALO = { outlineBlur: 0.004, outlineColor: "black", outlineOpacity: 0.5 } as const;
 
 const cardY = (row: number) => TOP_CARD_Y - row * CARD_STEP;
 
@@ -37,7 +37,7 @@ export function SettingsPanel() {
   return (
     <>
       <BackButton />
-      <Text position={[0, HEADER_Y, 0]} fontSize={0.026} anchorX="center" anchorY="middle" color="white" {...HALO}>
+      <Text position={[0, HEADER_Y, 0]} fontSize={0.026} anchorX="center" anchorY="middle" color="white" {...TEXT_HALO}>
         {t("settings.title")}
       </Text>
       <Row
@@ -89,11 +89,11 @@ function Row<T extends string | number | null>({ y, label, hint, options, value,
   const trackX = TRACK_RIGHT - segmentedWidth(options.length, optionWidth) / 2;
   return (
     <GlassPanel width={CARD_WIDTH} height={CARD_HEIGHT} radius={CARD_RADIUS} position={[0, y, 0]}>
-      <Text position={[LABEL_X, hint ? 0.011 : 0, 0]} fontSize={0.02} anchorX="left" anchorY="middle" color="white" {...HALO}>
+      <Text position={[LABEL_X, hint ? 0.011 : 0, 0]} fontSize={0.02} anchorX="left" anchorY="middle" color="white" {...TEXT_HALO}>
         {label}
       </Text>
       {hint && (
-        <Text position={[LABEL_X, -0.013, 0]} fontSize={0.015} anchorX="left" anchorY="middle" color="white" fillOpacity={0.85} {...HALO}>
+        <Text position={[LABEL_X, -0.013, 0]} fontSize={0.015} anchorX="left" anchorY="middle" color="white" fillOpacity={0.85} {...TEXT_HALO}>
           {hint}
         </Text>
       )}

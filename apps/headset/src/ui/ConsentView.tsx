@@ -4,7 +4,7 @@ import { expectMemory } from "../memories.ts";
 import { send } from "../session.ts";
 import { t } from "../strings.ts";
 import { Button3D } from "./Button3D.tsx";
-import { ACCENT } from "./glass.ts";
+import { ACCENT, TEXT_HALO } from "./glass.ts";
 import { GlassPanel } from "./GlassPanel.tsx";
 import { Icon3D } from "./Icon3D.tsx";
 import { notify, showView, useView } from "./views.ts";
@@ -19,7 +19,6 @@ const CARD_Y = 0.2;
 const BUTTON_Y = -0.105;
 const BUTTON_GAP = 0.02;
 const NOT_NOW_WIDTH = 0.18;
-const HALO = { outlineBlur: 0.004, outlineColor: "black", outlineOpacity: 0.5 } as const;
 
 export function ConsentView() {
   const atStart = useView((s) => s.view.kind === "consent" && !!s.view.atStart);
@@ -31,7 +30,7 @@ export function ConsentView() {
     <>
       <GlassPanel width={0.64} height={0.24} radius={0.034} position={[0, CARD_Y, 0]}>
         <Icon3D name="bookOpen" size={0.036} color={ACCENT} position={[0, 0.08 + shift, 0]} />
-        <Text position={[0, 0.038 + shift, 0]} fontSize={0.026} maxWidth={0.56} textAlign="center" anchorY="middle" color="white" {...HALO}>
+        <Text position={[0, 0.038 + shift, 0]} fontSize={0.026} maxWidth={0.56} textAlign="center" anchorY="middle" color="white" {...TEXT_HALO}>
           {t("memories.consentQuestion")}
         </Text>
         <Text
@@ -42,12 +41,12 @@ export function ConsentView() {
           anchorY="middle"
           color="white"
           fillOpacity={0.9}
-          {...HALO}
+          {...TEXT_HALO}
         >
           {t("memories.consentDetail")}
         </Text>
         {atStart && (
-          <Text position={[0, -0.076, 0]} fontSize={0.015} maxWidth={0.56} textAlign="center" anchorY="middle" color="white" fillOpacity={0.8} {...HALO}>
+          <Text position={[0, -0.076, 0]} fontSize={0.015} maxWidth={0.56} textAlign="center" anchorY="middle" color="white" fillOpacity={0.8} {...TEXT_HALO}>
             {t("memories.consentLater")}
           </Text>
         )}

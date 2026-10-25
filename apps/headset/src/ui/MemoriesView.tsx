@@ -8,12 +8,12 @@ import { t } from "../strings.ts";
 import { DeleteButton, ListTabs } from "./ConversationsView.tsx";
 import { Pager } from "./controls.tsx";
 import { GlassPanel } from "./GlassPanel.tsx";
+import { TEXT_HALO } from "./glass.ts";
 
 const PAGE_SIZE = 4;
 // Two lines at most, so a long summary can't spill out of its card or under "Really delete?".
 const SUMMARY_CHARS = 90;
 const CARD_STEP = 0.084;
-const HALO = { outlineBlur: 0.004, outlineColor: "black", outlineOpacity: 0.5 } as const;
 
 export function MemoriesView() {
   const items = useMemories((s) => s.items);
@@ -31,12 +31,12 @@ export function MemoriesView() {
   return (
     <>
       <ListTabs tab="memories" />
-      <Text position={[-0.347, 0.27, 0]} fontSize={0.019} anchorX="left" color="white" {...HALO}>
+      <Text position={[-0.347, 0.27, 0]} fontSize={0.019} anchorX="left" color="white" {...TEXT_HALO}>
         {items.length ? t("memories.heading") : t("memories.empty")}
       </Text>
       {items.slice(shown * PAGE_SIZE, (shown + 1) * PAGE_SIZE).map((m, i) => (
         <GlassPanel key={m.id} width={0.694} height={0.072} radius={0.026} position={[0, 0.215 - i * CARD_STEP, 0]}>
-          <Text position={[-0.32, 0, 0.004]} fontSize={0.018} maxWidth={0.46} anchorX="left" color="white" {...HALO}>
+          <Text position={[-0.32, 0, 0.004]} fontSize={0.018} maxWidth={0.46} anchorX="left" color="white" {...TEXT_HALO}>
             {m.summary.length > SUMMARY_CHARS ? `${m.summary.slice(0, SUMMARY_CHARS)}…` : m.summary}
           </Text>
           <DeleteButton

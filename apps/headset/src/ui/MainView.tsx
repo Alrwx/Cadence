@@ -9,7 +9,7 @@ import { useMemories } from "../memories.ts";
 import { send, useCadence, useHeadset } from "../session.ts";
 import { t } from "../strings.ts";
 import { Button3D } from "./Button3D.tsx";
-import { ACCENT, ignoreRays } from "./glass.ts";
+import { ACCENT, TEXT_HALO, ignoreRays } from "./glass.ts";
 import { GlassPanel } from "./GlassPanel.tsx";
 import { Icon3D } from "./Icon3D.tsx";
 import type { IconName } from "./icons.ts";
@@ -79,9 +79,7 @@ function ListenerPrompt() {
         anchorX="left"
         anchorY="middle"
         color="white"
-        outlineBlur={0.004}
-        outlineColor="black"
-        outlineOpacity={0.5}
+        {...TEXT_HALO}
       >
         {t("listener.prompt")}
       </Text>

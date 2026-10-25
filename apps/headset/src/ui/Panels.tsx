@@ -8,7 +8,7 @@ import { useCadence, useHeadset } from "../session.ts";
 import { t } from "../strings.ts";
 import { ConsentView } from "./ConsentView.tsx";
 import { ConversationsView } from "./ConversationsView.tsx";
-import { ACCENT, ignoreRays } from "./glass.ts";
+import { ACCENT, TEXT_HALO, ignoreRays } from "./glass.ts";
 import { GlassPanel } from "./GlassPanel.tsx";
 import { Icon3D } from "./Icon3D.tsx";
 import { MainView } from "./MainView.tsx";
@@ -16,7 +16,7 @@ import { MemoriesView } from "./MemoriesView.tsx";
 import { SavedPhrasesView } from "./SavedPhrasesView.tsx";
 import { SettingsPanel } from "./SettingsPanel.tsx";
 import { TextEntryView } from "./TextEntryView.tsx";
-import { notify, showView, useConsentAtStart, useView } from "./views.ts";
+import { notify, useConsentAtStart, useView } from "./views.ts";
 
 // Tilted back so the panel faces the eyes from below the line of sight.
 const PANEL_TILT = Math.atan2(layout.panelOffset[1], -layout.panelOffset[2]);
@@ -46,7 +46,7 @@ export function Panels() {
   else if (view.kind === "saved") content = <SavedPhrasesView />;
   else if (view.kind === "conversations") content = view.tab === "memories" ? <MemoriesView /> : <ConversationsView />;
   else if (view.kind === "consent") content = <ConsentView />;
-  else if (view.kind === "settings") content = <SettingsPanel onClose={() => showView({ kind: "main" })} />;
+  else if (view.kind === "settings") content = <SettingsPanel />;
   else content = <MainView />;
 
   const onMain = sessionState !== "COMPOSING" && view.kind === "main";
@@ -101,9 +101,7 @@ function StatusPill({ y }: { y: number }) {
         textAlign="center"
         anchorY="middle"
         color={color}
-        outlineBlur={0.004}
-        outlineColor="black"
-        outlineOpacity={0.5}
+        {...TEXT_HALO}
         onSync={(troika: { textRenderInfo?: { blockBounds: [number, number, number, number] } }) => {
           const bounds = troika.textRenderInfo?.blockBounds;
           if (bounds) setTextSize([bounds[2] - bounds[0], bounds[3] - bounds[1]]);

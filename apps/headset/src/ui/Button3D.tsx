@@ -7,7 +7,7 @@ import { Color, MathUtils, type Group, type Mesh } from "three";
 import { layout } from "../config.ts";
 import { dwellProgress, dwellTargets, useHeadHover } from "../selection/targets.ts";
 import { handsEnabled, useSettings } from "../settings.ts";
-import { ACCENT, createGlassMaterial, DANGER, DANGER_RIM, GLASS_OPACITY, GLASS_TINT, ignoreRays, SOLID_OPACITY } from "./glass.ts";
+import { ACCENT, DANGER, DANGER_RIM, GLASS_OPACITY, GLASS_TINT, SOLID_OPACITY, TEXT_HALO, createGlassMaterial, ignoreRays } from "./glass.ts";
 import { Icon3D } from "./Icon3D.tsx";
 import type { IconName } from "./icons.ts";
 
@@ -186,9 +186,7 @@ export function Button3D({
             anchorY="middle"
             color="white"
             fillOpacity={disabled ? 0.55 : 1}
-            outlineBlur={0.004}
-            outlineColor="black"
-            outlineOpacity={0.5}
+            {...TEXT_HALO}
             // A centered icon sits just left of the text, so it needs the laid-out width.
             onSync={(text: { textRenderInfo?: { blockBounds: [number, number, number, number] } }) => {
               const bounds = text.textRenderInfo?.blockBounds;

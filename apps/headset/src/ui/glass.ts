@@ -16,6 +16,9 @@ export const ACCENT = "#2dd4bf";
 export const DANGER = "#e11d48";
 export const DANGER_RIM = "#fb7185";
 
+/** Soft dark halo that keeps white text readable over whatever the glass lets through. */
+export const TEXT_HALO = { outlineBlur: 0.004, outlineColor: "black", outlineOpacity: 0.5 } as const;
+
 // The lift and squish move only what's drawn: the mesh itself stays put, since it is also the pinch and dwell target.
 const vertexShader = /* glsl */ `
 uniform vec2 uScale;

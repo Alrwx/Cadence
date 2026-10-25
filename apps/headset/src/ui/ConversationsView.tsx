@@ -7,7 +7,7 @@ import { send } from "../session.ts";
 import { t } from "../strings.ts";
 import { Button3D } from "./Button3D.tsx";
 import { BackButton, HEADER_Y, Pager, Segmented } from "./controls.tsx";
-import { ACCENT } from "./glass.ts";
+import { ACCENT, TEXT_HALO } from "./glass.ts";
 import { GlassPanel } from "./GlassPanel.tsx";
 import { Icon3D } from "./Icon3D.tsx";
 import { showView } from "./views.ts";
@@ -24,7 +24,6 @@ const CHIP_HEIGHT = 0.05;
 const SMALL_FONT = 0.018;
 const DELETE_SIZE = 0.052;
 const CONFIRM_WIDTH = 0.18;
-const HALO = { outlineBlur: 0.004, outlineColor: "black", outlineOpacity: 0.5 } as const;
 
 /** The header both list tabs share: Back, and the Conversations | Memories switch. */
 export function ListTabs({ tab }: { tab: "conversations" | "memories" }) {
@@ -96,7 +95,7 @@ export function ConversationsView() {
   return (
     <>
       <ListTabs tab="conversations" />
-      <Text position={[-0.19, 0.26, 0]} fontSize={0.019} anchorX="right" color="white" {...HALO}>
+      <Text position={[-0.19, 0.26, 0]} fontSize={0.019} anchorX="right" color="white" {...TEXT_HALO}>
         {t("conversations.saveAs")}
       </Text>
       {t("conversations.presets")
@@ -113,7 +112,7 @@ export function ConversationsView() {
           />
         ))}
       {savedAs && <Icon3D name="check" size={0.02} color={ACCENT} position={[-0.337, 0.205, 0]} />}
-      <Text position={[savedAs ? -0.32 : -0.347, 0.205, 0]} fontSize={SMALL_FONT} anchorX="left" color="white" {...HALO}>
+      <Text position={[savedAs ? -0.32 : -0.347, 0.205, 0]} fontSize={SMALL_FONT} anchorX="left" color="white" {...TEXT_HALO}>
         {savedAs ? t("conversations.savedAs", { label: savedAs }) : items.length ? t("conversations.useAsContext") : t("conversations.empty")}
       </Text>
       {items.slice(shown * PAGE_SIZE, (shown + 1) * PAGE_SIZE).map((c, i) => {
@@ -128,7 +127,7 @@ export function ConversationsView() {
               anchorX="left"
               anchorY={summary ? "top" : "middle"}
               color="white"
-              {...HALO}
+              {...TEXT_HALO}
             >
               {c.label}
             </Text>
@@ -141,7 +140,7 @@ export function ConversationsView() {
                 anchorY="top"
                 color="white"
                 fillOpacity={0.88}
-                {...HALO}
+                {...TEXT_HALO}
               >
                 {summary}
               </Text>
