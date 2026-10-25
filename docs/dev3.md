@@ -1,8 +1,8 @@
 # Dev 3 status and handoff
 
-Owner: Dev 3 (AI pipeline: `services/models`, `mocks/mock-models`). Scope is in `AGENTS(GH).md` §7. Last updated 2026-10-24, on branch `models/real-backends` (based on main `96a8975`).
+Owner: Dev 3 (AI pipeline: `services/models`, `mocks/mock-models`). Scope is in `AGENTS(GH).md` §7. Last updated 2026-10-24. Everything below is on main (merged in PR #18, with review fixes).
 
-Read this before working on `services/models`, before calling the model service from the gateway, and before reviewing the `models/real-backends` PR. Agents: follow `AGENTS(GH).md` §8 too.
+Read this before working on `services/models` and before calling the model service from the gateway. Agents: follow `AGENTS(GH).md` §8 too.
 
 ---
 
