@@ -6,7 +6,7 @@ import {
   type CadenceState,
   type ConnectionStatus,
 } from "@cadence/shared";
-import { t } from "@cadence/shared/i18n";
+import { isLocale, LANGUAGES, t } from "@cadence/shared/i18n";
 import { useEffect, useState } from "react";
 import { useStore } from "zustand";
 import { createStore } from "zustand/vanilla";
@@ -78,6 +78,8 @@ export function App() {
   const [settingUpVoice, setSettingUpVoice] = useState(false);
   const [managingPhrases, setManagingPhrases] = useState(false);
   const [micError, setMicError] = useState<string | null>(null);
+  // Every string comes from t(), which follows the gateway's language event; re-render the tree when it changes.
+  useCadence((s) => s.locale);
 
   useEffect(() => {
     connection.connect();
@@ -127,7 +129,7 @@ export function App() {
   );
 }
 
-/** The connection status on the left, the light and dark switch on the right. */
+/** The connection status on the left; the language and the light and dark switch on the right. */
 function TopBar({ status }: { status: ConnectionStatus }) {
   const theme = useTheme();
   const next = theme === "dark" ? "light" : "dark";
@@ -136,14 +138,34 @@ function TopBar({ status }: { status: ConnectionStatus }) {
       <span className={`pill ${status}`} role="status">
         {t(`status.${status}`)}
       </span>
-      <button
-        className="icon-btn theme-toggle"
-        onClick={() => setTheme(next)}
-        aria-label={t(next === "dark" ? "theme.toDark" : "theme.toLight")}
-      >
-        <Icon name={theme === "dark" ? "sun" : "moon"} />
-      </button>
+      <div className="topbar-actions">
+        <LanguageToggle />
+        <button
+          className="icon-btn theme-toggle"
+          onClick={() => setTheme(next)}
+          aria-label={t(next === "dark" ? "theme.toDark" : "theme.toLight")}
+        >
+          <Icon name={theme === "dark" ? "sun" : "moon"} />
+        </button>
+      </div>
     </div>
+  );
+}
+
+/** Shows the current language; a tap moves the whole app (both devices, and the conversation) to the next one. */
+function LanguageToggle() {
+  const locale = useCadence((s) => s.locale);
+  const supported = useCadence((s) => s.supportedLocales).filter(isLocale);
+  if (supported.length < 2) return null; // not connected yet, or nothing to switch to
+  const next = supported[(supported.indexOf(locale) + 1) % supported.length]!;
+  return (
+    <button
+      className="icon-btn language-toggle"
+      onClick={() => connection.send("language.set", { locale: next })}
+      aria-label={t("language.switchTo", { language: LANGUAGES[next] })}
+    >
+      {locale.toUpperCase()}
+    </button>
   );
 }
 

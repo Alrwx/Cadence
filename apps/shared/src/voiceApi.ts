@@ -39,9 +39,11 @@ export async function createConsent(
 /**
  * Uploads a recorded or picked sample (audio, or video with audio) and returns the new voice ID.
  * `transcript`, if given, must match the sample word for word; without it the model service transcribes the sample.
+ * `locale` is the language spoken in the sample (default: the app's current one); creating the voice switches the
+ * whole app to it.
  */
 export async function uploadVoice(
-  req: { sessionId: string; consentId: string; sample: Blob; fileName: string; transcript?: string },
+  req: { sessionId: string; consentId: string; sample: Blob; fileName: string; transcript?: string; locale?: string },
   fetchImpl: Fetch = fetch,
 ): Promise<string> {
   const form = new FormData();
@@ -50,6 +52,7 @@ export async function uploadVoice(
   form.append("sessionId", req.sessionId);
   const transcript = req.transcript?.trim();
   if (transcript) form.append("transcript", transcript);
+  if (req.locale) form.append("locale", req.locale);
   const res = await fetchImpl("/api/voices", { method: "POST", body: form });
   return (await readJson<{ voiceId: string }>(res)).voiceId;
 }

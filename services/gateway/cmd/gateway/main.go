@@ -76,7 +76,7 @@ func run() error {
 	mux.Handle("GET /ws", h)
 	mux.Handle("GET /clips/{file}", cc)
 	vh := &voices.Handler{
-		Store: st, Models: mc, Voices: orch, Clips: cc, PersonID: defaultPersonID, Locale: locale,
+		Store: st, Models: mc, Voices: orch, Clips: cc, PersonID: defaultPersonID, Locales: orchestrator.SupportedLocales,
 		OriginPatterns: h.OriginPatterns, // same rule as /ws
 	}
 	mux.HandleFunc("POST /api/consent", vh.Consent)

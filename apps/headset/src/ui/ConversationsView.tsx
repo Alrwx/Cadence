@@ -7,6 +7,7 @@ import { send } from "../session.ts";
 import { t } from "../strings.ts";
 import { Button3D } from "./Button3D.tsx";
 import { showView } from "./views.ts";
+import { getLocale } from "@cadence/shared/i18n";
 
 // Typing a label in XR is slow, so a save is one press: a preset plus today's date.
 const PAGE_SIZE = 3;
@@ -31,7 +32,7 @@ export function ConversationsView() {
   }, [confirming]);
 
   const save = (preset: string) => {
-    const date = new Date().toLocaleDateString(undefined, { month: "short", day: "numeric" });
+    const date = new Date().toLocaleDateString(getLocale(), { month: "short", day: "numeric" });
     const label = t("conversations.label", { preset, date });
     send("conversation.save", { label });
     setSavedAs(label);

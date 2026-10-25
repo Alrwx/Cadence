@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "language",
+  "description": "The language everything runs in: listening, suggestions, speech, and both UIs. Sent on connect and after any change. supported lists the locales language.set accepts.",
+  "x-direction": "gateway → headset, phone",
+  "type": "object",
+  "properties": {
+    "locale": {
+      "type": "string",
+      "description": "BCP 47 locale, e.g. \"en\" or \"es\""
+    },
+    "supported": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  },
+  "required": [
+    "locale",
+    "supported"
+  ],
+  "additionalProperties": false
+}

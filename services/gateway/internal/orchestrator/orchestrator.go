@@ -32,7 +32,12 @@ type Orchestrator struct {
 
 	// Single-user for now: every session belongs to this person.
 	personID string
-	locale   string
+
+	localeMu sync.RWMutex
+	locale   string // the language conversations run in (language.go); read it with currentLocale
+
+	languageRefreshing atomic.Bool // refreshLanguage is moving the sessions to the new language
+	languageDirty      atomic.Bool // the language changed while it was
 
 	// The voice clips are made in (see voice.go). Never held while sending.
 	voiceMu     sync.RWMutex
@@ -96,6 +101,7 @@ func (o *Orchestrator) OnConnect(s *hub.Session, role hub.Role) {
 	ctx := context.Background()
 	_ = s.Send(ctx, role, protocol.TypeState, turnID, protocol.StateData{State: string(state)})
 	_ = s.Send(ctx, role, protocol.TypeVoice, "", o.voiceStatus())
+	_ = s.Send(ctx, role, protocol.TypeLanguage, "", o.languageStatus())
 	if role == hub.Headset {
 		o.sendPhrases(ctx, s)
 		o.sendConsent(ctx, s)
@@ -162,7 +168,7 @@ func (o *Orchestrator) OnEvent(s *hub.Session, from hub.Role, env protocol.Envel
 	case *protocol.AudioDoneData:
 		o.apply(ctx, s, ss, session.ClipDone)
 	case *protocol.ComposeSubmitData:
-		o.speak(ctx, s, ss, d.Text, "typed", o.locale)
+		o.speak(ctx, s, ss, d.Text, "typed", o.currentLocale())
 	case *protocol.SelectData:
 		ss.mu.Lock()
 		text, ok := ss.suggestions[d.SuggestionID]
@@ -171,10 +177,11 @@ func (o *Orchestrator) OnEvent(s *hub.Session, from hub.Role, env protocol.Envel
 			o.sendError(ctx, s, "stale_suggestion", "That suggestion is no longer available.")
 			return
 		}
-		o.speak(ctx, s, ss, text, "suggestion", o.locale)
+		o.speak(ctx, s, ss, text, "suggestion", o.currentLocale())
 	case *protocol.InstantData:
 		// Pre-synthesized by warmClips; synthesized now only if warm-up hasn't reached it yet.
-		o.speak(ctx, s, ss, instantText[d.PhraseID], "instant", o.locale)
+		locale := o.currentLocale()
+		o.speak(ctx, s, ss, instantPhrase(locale, d.PhraseID), "instant", locale)
 	case *protocol.PhraseSpeakData, *protocol.PhraseSaveData, *protocol.PhraseDeleteData,
 		*protocol.PhraseGroupSaveData, *protocol.PhraseGroupDeleteData:
 		o.onPhraseEvent(ctx, s, ss, d)
@@ -183,6 +190,8 @@ func (o *Orchestrator) OnEvent(s *hub.Session, from hub.Role, env protocol.Envel
 		o.onMemoryEvent(ctx, s, ss, d)
 	case *protocol.VoiceUseData:
 		o.useVoice(ctx, s, from, d.Voice)
+	case *protocol.LanguageSetData:
+		o.setLanguage(ctx, s, from, d.Locale)
 	case *protocol.ListenerSayData:
 		o.onListenerSay(ctx, s, ss, from, d.Text)
 	default:
@@ -191,10 +200,6 @@ func (o *Orchestrator) OnEvent(s *hub.Session, from hub.Role, env protocol.Envel
 }
 
 const phoneOfflineMessage = "The phone isn't connected, so nothing can play. Open Cadence on the phone and tap Start."
-
-var instantText = map[string]string{
-	"yes": "Yes", "no": "No", "wait": "Give me a second", "hello": "Hello", "laugh": "Ha ha",
-}
 
 // speak gets a clip for text (from the cache, or synthesized now), logs it, and tells the phone to play it.
 // The phone is the only speaker: with no phone connected the selection is refused (the headset keeps its

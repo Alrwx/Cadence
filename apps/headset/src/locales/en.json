@@ -73,6 +73,7 @@
   "entry.cancel": "Cancel",
   "entry.speak": "Speak",
   "entry.words.list": "I|you|need|want|please|thank you|water|help|pain|tired|yes|no",
+  "entry.letters.rows": "qwertyuiop|asdfghjkl'|zxcvbnm,.?",
   "settings.selectWith": "Select with",
   "settings.hands": "Hands",
   "settings.head": "Head",

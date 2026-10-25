@@ -53,6 +53,17 @@ test("uploadVoice sends a transcript only when one was typed", async () => {
   await upload("   ");
   assert.equal((calls[0]!.init.body as FormData).get("transcript"), "Hello there.");
   assert.equal((calls[1]!.init.body as FormData).get("transcript"), null);
+  assert.equal((calls[1]!.init.body as FormData).get("locale"), null, "no locale: the gateway uses the current one");
+});
+
+test("uploadVoice sends the language spoken in the sample", async () => {
+  const calls: { url: string; init: RequestInit }[] = [];
+  const sample = new Blob([new Uint8Array([1])], { type: "audio/wav" });
+  await uploadVoice(
+    { sessionId: "demo", consentId: "c_1", sample, fileName: "a.wav", locale: "es" },
+    fakeFetch(201, { voiceId: "v_1" }, calls),
+  );
+  assert.equal((calls[0]!.init.body as FormData).get("locale"), "es");
 });
 
 test("gateway errors surface their code and message", async () => {

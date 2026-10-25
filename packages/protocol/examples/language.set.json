@@ -1,0 +1,9 @@
+{
+  "type": "language.set",
+  "v": 1,
+  "sessionId": "s_123",
+  "ts": 1729740009000,
+  "data": {
+    "locale": "es"
+  }
+}

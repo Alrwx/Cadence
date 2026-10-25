@@ -48,7 +48,10 @@ A lighter version of saved conversations. At any moment the user can pick **"Rem
 The user holds the reticle on an object in the room (a cup, the TV remote, a blanket); the app recognizes it and the suggestions become requests about it ("Can you hand me the water?"). This needs frames from the Quest's passthrough cameras, and Quest Browser's WebXR doesn't expose them today (requesting the `camera-access` feature fails as of early 2026). Candidates to spike: `getUserMedia` in Quest Browser (reported to work, but frames aren't aligned with head pose), or the phone camera. **Don't start until a spike gets frames to the gateway.**
 
 ### Languages
-English only for the demo, but nothing hard-codes it. Each person has a `locale` that is passed to `/stt`, `/suggest`, and `/tts`; saved phrases store their locale; UI strings in both apps come from locale-keyed files (`apps/shared/locales/en.json`). Adding a language later should be translation work, not plumbing.
+English and Spanish. Each person has a `locale` that is passed to `/stt`, `/suggest`, `/summarize`, and `/tts`; saved phrases store their locale and are always spoken in it; UI strings in both apps come from locale-keyed files (`apps/shared/locales/`, `apps/headset/src/locales/`).
+- The voice sample's language sets the language: voice setup asks which language the clip is in, and creating the voice switches everything (listening, suggestions, speech, both UIs, the headset keyboard and word board) to it. The phone's top bar switches it afterwards (`language.set`).
+- A language the person hasn't used before gets its own starter phrase groups; phrases in other languages stay as written.
+- Adding a language is translation work: locale files for both apps, instant phrases and starter phrases in the gateway, and an entry in `SupportedLocales` (`services/gateway/internal/orchestrator/language.go`) and `LANGUAGES` (`apps/shared/src/i18n.ts`).
 
 **Why AR and not a tablet:** reply options float beside the listener's face, so the user keeps eye contact instead of looking down at a screen. The listener sees an "I'm answering" indicator on the phone so silence isn't mistaken for "done."
 
@@ -230,6 +233,8 @@ Every JSON event has this envelope:
 | `audio.play` | gw → phone | `{ clipId, url: "/clips/<id>.wav", text, source: "suggestion"\|"instant"\|"saved"\|"typed" }` |
 | `audio.done` | phone → gw | `{ clipId }` |
 | `phone.unlock` | phone → gw | `{}` (user tapped "Start"; audio autoplay is now allowed) |
+| `language` | gw → headset, phone | `{ locale, supported: [] }` (sent on connect and after any change) |
+| `language.set` | phone/headset → gw | `{ locale }` (answered with `language`, or `error` if unsupported) |
 | `error` | gw → client | `{ code, message, recoverable: bool }` |
 
 **Stretch (saved conversations), add once the core is stable:**
@@ -267,7 +272,7 @@ Rules:
 | `POST /suggest` | `{ turnId, history: [{speaker, text}], style: {phrases[], tone}, context?: [{ label, summary }], memories?: [string], locale?: "en", n: 3 }` | `{ turnId, items: [{ text, kind }] , ms }` (`context` = attached saved conversations, `memories` = recent quick memories; both stretch) |
 | `POST /summarize` *(stretch)* | `{ turns: [{speaker, text}], locale?: "en" }` | `{ summary, ms }` (used for saved conversations and quick memories) |
 | `POST /tts` | `{ voiceId, text, locale?: "en" }` | `audio/wav` body, header `X-Gen-Ms` |
-| `POST /voices` | multipart: `audio` (audio file, or video with an audio track), `transcript?`, `consentId` | `{ voiceId }` (no `transcript` → the service transcribes the sample with STT) |
+| `POST /voices` | multipart: `audio` (audio file, or video with an audio track), `transcript?`, `consentId`, `locale?` | `{ voiceId }` (no `transcript` → the service transcribes the sample with STT, in `locale`) |
 | `DELETE /voices/{voiceId}` | – | `204` (deletes cached voice prompt) |
 
 New fields are optional with an `"en"` default, so they're additive. The gateway owns timeouts: `/suggest` 3 s, `/tts` 6 s. On timeout, it sends the headset an `error` with `recoverable: true` and still allows instant phrases and typing.

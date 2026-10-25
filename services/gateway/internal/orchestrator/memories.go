@@ -121,7 +121,7 @@ func (o *Orchestrator) summarizeAndStore(ctx context.Context, s *hub.Session, ss
 			ss.mu.Unlock()
 		}()
 		ctx := context.Background()
-		summary, err := o.models.Summarize(ctx, turns, o.locale)
+		summary, err := o.models.Summarize(ctx, turns, o.currentLocale())
 		if err == nil && strings.TrimSpace(summary) == "" {
 			err = errors.New("empty summary")
 		}
@@ -292,14 +292,21 @@ func contentWords(text string) map[string]bool {
 	return words
 }
 
-// English only for now (AGENTS(GH).md §1); other locales just match more loosely.
+// English and Spanish, the supported languages (language.go); others just match more loosely. Words are
+// matched in both, since a memory saved in one language may be matched against turns in the other.
 var stopWords = func() map[string]bool {
 	m := map[string]bool{}
 	for _, w := range strings.Fields(`the an and or but if then so is are was were be been being am do does did
 		have has had will would can could should may might must to of in on at by for with about from into up
 		out over it its this that these those there here what when where who whom which why how not no yes
 		me my mine you your yours he him his she her hers we us our they them their said say says tell told
-		just very really too also all any some okay ok oh well ve ll re don isn didn doesn won`) {
+		just very really too also all any some okay ok oh well ve ll re don isn didn doesn won
+		el la los las un una unos unas lo le les al del de en con por para sin sobre entre hasta desde
+		que qué y o pero si sí ni como cómo cuando cuándo donde dónde quien quién cual cuál por qué porque
+		es son era eran fue fueron ser estar está están estaba estaban he ha han había hay hace hacer
+		yo tú tu te ti mi mí mis me se nos usted ustedes él ella ellos ellas su sus nuestro nuestra
+		este esta esto estos estas ese esa eso esos esas aquí allí ahí ya muy más menos también todo
+		todos toda todas algo nada bueno bien vale dijo dice decir`) {
 		m[w] = true
 	}
 	return m
