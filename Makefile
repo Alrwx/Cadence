@@ -8,6 +8,9 @@ export
 LAN_IP ?= $(shell ipconfig getifaddr en0 2>/dev/null || hostname -I 2>/dev/null | awk '{print $$1}')
 MODELS_DIR := $(if $(filter 1,$(USE_MOCK_MODELS)),mocks/mock-models,services/models)
 MODELS_APP := $(if $(filter 1,$(USE_MOCK_MODELS)),mock_models:app,app.main:app)
+# The real service needs its backend's extra (mlx on the Mac, cuda on the 3080) and keeps voices in data/voices.
+MODELS_BACKEND ?= mlx
+MODELS_RUN := $(if $(filter 1,$(USE_MOCK_MODELS)),uv run,DATA_DIR=../../data uv run --extra $(MODELS_BACKEND))
 
 .PHONY: setup certs protocol dev dev-mock gateway models headset phone mock-gateway build demo \
 	test test-protocol test-gateway test-models test-shared test-headset typecheck fmt
@@ -44,7 +47,7 @@ gateway:
 		DATA_DIR=../../data go run ./cmd/gateway
 
 models:
-	cd $(MODELS_DIR) && uv run uvicorn $(MODELS_APP) --host 127.0.0.1 --port 8000
+	cd $(MODELS_DIR) && $(MODELS_RUN) uvicorn $(MODELS_APP) --host 127.0.0.1 --port 8000
 
 headset:
 	pnpm --filter @cadence/headset dev
