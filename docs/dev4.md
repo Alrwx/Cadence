@@ -70,10 +70,12 @@ Read this before working on `services/gateway`, `packages/protocol`, or the root
   - the `voice_profile` row and the model service's copy (`DELETE /voices/{id}`)
   - the `phrase_clip` rows for that voice, plus their files in `<DATA_DIR>/clips`
   - Because the clip cache has no FK, this delete has to happen **in code**.
-- [ ] **Speculation on partials (§3).** `/suggest` currently fires only on `final`. Plan:
-  - debounce partials (~400 ms with no new words)
-  - call `/suggest` on the partial transcript
-  - cancel the call if the transcript changes
+- [x] **Speculation on partials (§3)** (`orchestrator/speculation.go`):
+  - In LISTENING, every partial (not just the rate-limited captions) restarts a debounce (400 ms, `Orchestrator.speculateAfter`). When it runs out with no new words, `/suggest` is called on the history plus the partial.
+  - New words cancel that call. A partial outside LISTENING, or the STT stream ending, drops the speculation.
+  - On the final, if it normalizes to the same words as the partial and the earlier turns are unchanged, the turn uses the speculative answer (waiting for it if it's still in flight). Otherwise the speculative call is cancelled and `/suggest` runs on the final as before. If the speculative call failed, the turn makes its own call. Matching rule: `docs/decisions.md`.
+  - Nothing is shown early. A speculative answer only becomes suggestions through final → `beginTurn` → SUGGESTING → `suggest` → `finishSuggesting`, so the stale-turn checks still apply.
+  - Metric `speculation` (`hit` / `miss` / `none` / `failed`), the same value as the detail on `final_to_suggestions`. Speculative calls are logged as `suggest` with a `spec:` prefix.
 - [x] **Metrics** (`orchestrator/metrics.go`, `store/metrics.go`). Rows in `metric`, never content:
   - `suggest`: `/suggest` ms; detail `ok` / `error` / `timeout` / `cancelled` / `empty`
   - `tts`: `/tts` ms; detail is why the clip was made: `suggestion` / `instant` / `saved` / `typed` / `warm`, with `:error` on failure
@@ -141,7 +143,7 @@ Read this before working on `services/gateway`, `packages/protocol`, or the root
 | `internal/models/` | the model-service client (HTTP + STT WebSocket) |
 
 ### Rules that are easy to break
-- **Lock discipline.** `sessionState.mu` guards the machine, `turnID`, `suggestions` and `history`; methods named `...Locked` expect it held. `sttMu` guards only the STT stream; don't hold `mu` while dialing. Never call `s.Send` or `Broadcast` while holding `mu`.
+- **Lock discipline.** `sessionState.mu` guards the machine, `turnID`, `suggestions` and `history`; methods named `...Locked` expect it held. `sttMu` guards only the STT stream; don't hold `mu` while dialing. Never call `s.Send` or `Broadcast` while holding `mu`. `spec.mu` (speculation) may be held while taking `mu`, never the other way round.
 - **Every state change goes through the machine:** `apply`, `beginTurn` or `finishSuggesting`. Async results must check that `turnID` is still current before acting (see `finishSuggesting` and `prepareSuggestion`).
 - **Model-service failures** send a recoverable `error` and leave instant phrases and typing working. Never block a WebSocket read loop on a model call; use a goroutine, as `suggest` and `prepareClip` do.
 - **No conversation text in SQLite without `store_chat` consent.** Metrics may always be stored; content may not. `audit_log` is the exception, since it's the safety record (§2).

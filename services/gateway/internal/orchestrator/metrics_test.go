@@ -66,7 +66,7 @@ func TestTurnAndSelectionAreMeasured(t *testing.T) {
 				valued bool
 			}{
 				{metricSuggest, []string{"ok"}, true},
-				{metricFinalToSuggestions, []string{""}, true},
+				{metricFinalToSuggestions, []string{"none"}, true}, // detail = speculation outcome
 				{metricSelection, []string{"suggestion"}, false},
 				{metricSelectToPlay, []string{"suggestion:cached"}, true}, // synthesized ahead of time
 			} {

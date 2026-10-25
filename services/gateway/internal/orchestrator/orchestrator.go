@@ -42,6 +42,8 @@ type Orchestrator struct {
 	rewarm   atomic.Bool // a warm-up was requested while one was running (e.g. the voice changed)
 
 	writer *dbWriter // metric, session and turn rows, written off the event path (metrics.go)
+
+	speculateAfter time.Duration // partial-transcript debounce before a speculative /suggest; 0 = default (speculation.go)
 }
 
 type sessionState struct {
@@ -53,6 +55,8 @@ type sessionState struct {
 	suggestions map[string]string // suggestion id -> text, for the current turn
 	history     []models.Turn
 	cancelTurn  context.CancelFunc // cancels the in-flight /suggest for the current turn
+
+	spec speculator // speculative /suggest on partials; its own lock, taken before mu (speculation.go)
 
 	// The speech-to-text stream is managed separately because opening it can block on a dial.
 	sttMu       sync.Mutex
