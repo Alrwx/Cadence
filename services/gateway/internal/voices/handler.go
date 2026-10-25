@@ -36,7 +36,8 @@ type Cloner interface {
 	CreateVoice(ctx context.Context, sample models.VoiceSample, consentID string) (string, error)
 }
 
-// VoiceSetter switches the live sessions to a new voice.
+// VoiceSetter switches the live sessions to a new voice. SetVoice must not block on the sessions' sockets:
+// it runs inside the upload's HTTP request.
 type VoiceSetter interface {
 	SetVoice(modelVoiceID string)
 }
@@ -162,6 +163,11 @@ func (h *Handler) Upload(w http.ResponseWriter, r *http.Request) {
 	modelVoiceID, err := h.Models.CreateVoice(r.Context(), form.sample, form.consentID)
 	if err != nil {
 		slog.Error("create voice", "consent", form.consentID, "bytes", len(form.sample.Data), "err", err)
+		// A model service that is down or still loading isn't the sample's fault: say to retry, not re-record.
+		if errors.Is(err, models.ErrUnavailable) {
+			writeError(w, http.StatusServiceUnavailable, "models_unavailable", "The voice model is still starting. Try again in a minute.")
+			return
+		}
 		writeError(w, http.StatusBadGateway, "model_error", "The voice model couldn't use that sample. Try again or use another recording.")
 		return
 	}

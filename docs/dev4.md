@@ -63,7 +63,7 @@ Read this before working on `services/gateway`, `packages/protocol`, or the root
   - `orchestrator.go` still uses the constant `defaultVoiceID = "default"` and a fixed `personID` (see its `TODO(Dev 4)`).
   - After a voice upload, `o.voiceID` must switch to the new voice. Each `voiceID` is a separate clip-cache key, so the new voice needs its own warm-up.
 - [ ] **Re-synthesize saved and instant phrases when the voice changes.** This is mostly `warmClips` run against the new voice, followed by a fresh `phrases` list, since `audioReady` depends on the voice.
-- [ ] **Robot-voice contrast (demo step 6).** Decide how the presenter switches back to a generic voice. Probably the model service's built-in voice, plus a control on the phone or headset. No protocol event exists for it yet.
+- [x] **Robot-voice contrast (demo step 6), gateway side.** `voice.use` / `voice` events; `orchestrator/voice.go` keeps the cloned voice apart from the "use default" choice. A `/tts` 404 for the cloned voice falls back to `"default"` (`loseVoice`). The phone toggle is proposed in `docs/proposals/2026-10-24-robot-voice-toggle.md` (Dev 2).
 
 ### P1: M3/M4 polish
 - [ ] **Revoking consent deletes everything (§2):**
@@ -135,7 +135,7 @@ Read this before working on `services/gateway`, `packages/protocol`, or the root
 | `internal/models/` | the model-service client (HTTP + STT WebSocket) |
 
 ### Rules that are easy to break
-- **Lock discipline.** `sessionState.mu` guards the machine, `turnID`, `suggestions` and `history`; methods named `...Locked` expect it held. `sttMu` guards only the STT stream; don't hold `mu` while dialing. Never call `s.Send` or `Broadcast` while holding `mu`.
+- **Lock discipline.** `sessionState.mu` guards the machine, `turnID`, `suggestions` and `history`; methods named `...Locked` expect it held. `sttMu` guards only the STT stream; don't hold `mu` while dialing. Never call `s.Send` or `Broadcast` while holding `mu`. `voiceMu` guards only the voice choice; change it through `updateVoice`, which refreshes the sessions in a goroutine (`refreshVoice`), so `SetVoice` never blocks on a socket.
 - **Every state change goes through the machine:** `apply`, `beginTurn` or `finishSuggesting`. Async results must check that `turnID` is still current before acting (see `finishSuggesting` and `prepareSuggestion`).
 - **Model-service failures** send a recoverable `error` and leave instant phrases and typing working. Never block a WebSocket read loop on a model call; use a goroutine, as `suggest` and `prepareClip` do.
 - **No conversation text in SQLite without `store_chat` consent.** Metrics may always be stored; content may not. `audit_log` is the exception, since it's the safety record (§2).

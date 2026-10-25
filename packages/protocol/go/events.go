@@ -47,6 +47,8 @@ const (
 	TypeSuggestions          = "suggestions"
 	TypeTranscriptFinal      = "transcript.final"
 	TypeTranscriptPartial    = "transcript.partial"
+	TypeVoice                = "voice"
+	TypeVoiceUse             = "voice.use"
 )
 
 // AudioDoneData: Phone finished playing a clip. (phone → gateway)
@@ -242,6 +244,17 @@ type TranscriptPartialData struct {
 	Speaker string `json:"speaker"`
 }
 
+// VoiceData: Which voice replies are spoken in; sent on connect and after any change. cloned says whether a cloned voice exists, so the toggle can be disabled without one. (gateway → headset, phone)
+type VoiceData struct {
+	Active string `json:"active"`
+	Cloned bool   `json:"cloned"`
+}
+
+// VoiceUseData: Speak in the cloned voice or the generic built-in one (the robot-voice contrast in the demo). Answered with an error when no cloned voice exists. (phone or headset → gateway)
+type VoiceUseData struct {
+	Voice string `json:"voice"`
+}
+
 // NewData returns a pointer to the zero data struct for an event type, or false for unknown types.
 func NewData(eventType string) (any, bool) {
 	switch eventType {
@@ -305,6 +318,10 @@ func NewData(eventType string) (any, bool) {
 		return &TranscriptFinalData{}, true
 	case TypeTranscriptPartial:
 		return &TranscriptPartialData{}, true
+	case TypeVoice:
+		return &VoiceData{}, true
+	case TypeVoiceUse:
+		return &VoiceUseData{}, true
 	}
 	return nil, false
 }

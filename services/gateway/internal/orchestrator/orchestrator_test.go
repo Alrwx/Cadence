@@ -31,6 +31,7 @@ type fakeModels struct {
 	suggestFail  bool
 	sttDown      bool
 	sttDials     atomic.Int64
+	missingVoice string // /tts answers 404 for this voiceId, as the model service does for an unknown voice
 
 	mu          sync.Mutex
 	suggestReqs []models.SuggestRequest
@@ -65,6 +66,10 @@ func (f *fakeModels) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 		f.ttsVoices[req.VoiceID]++
 		f.mu.Unlock()
+		if f.missingVoice != "" && req.VoiceID == f.missingVoice {
+			http.Error(w, `{"detail":"unknown voiceId `+req.VoiceID+`"}`, http.StatusNotFound)
+			return
+		}
 		time.Sleep(f.delay)
 		w.Header().Set("Content-Type", "audio/wav")
 		_, _ = w.Write([]byte("RIFF-fake-wav"))

@@ -62,3 +62,11 @@ Append-only. One entry per decision: date, decision, why, who.
 **Decision:** On the 3080, Ollama serves `gemma4:e4b` on the same GPU as the model service, and the CUDA backend sets `PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True` by default.
 **Why:** All three models fit in the 3080's 10 GB with about 250 MB to spare, and `/suggest` takes 389 ms p50, well under the 1.5 s budget (`docs/latency.md`). Without expandable segments, TTS ran out of memory in one of two benchmark runs. The margin is thin: if a batch of 4 or a longer context breaks it, switch Whisper to faster-whisper int8 (an estimated 1 GB less, not yet measured) before moving Gemma to another machine.
 **Who:** PaoloAJ (Dev 3)
+
+### 2026-10-24 – The robot voice is a `voice.use` switch; a lost cloned voice falls back to it
+**Decision:**
+- Added `voice.use { voice: "cloned" | "default" }` (phone or headset → gw) and `voice { active, cloned }` (gw → both, on connect and after any change). The gateway keeps the cloned voice and the "use the generic voice" choice apart, so switching for demo step 6 and back never loses the clone. Uploading a new voice switches back to it. The choice lives in memory only; a restart starts on the cloned voice.
+- If `/tts` answers 404 for the cloned voice (the model service lost its files), the gateway makes that clip in `"default"`, stays on `"default"` until a new voice is recorded or the gateway restarts, tells the headset (`error voice_missing`), and broadcasts `voice` with `cloned: false`.
+- `POST /api/voices` answers `503 models_unavailable` when the model service is unreachable or still loading, and keeps `502 model_error` for a sample the model service rejected.
+**Why:** Demo step 6 needs a one-tap contrast. Without the fallback, a wiped voices folder made every clip fail until someone re-recorded. The phone should only ask for a new recording when the recording was the problem.
+**Who:** Dev 4

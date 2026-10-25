@@ -4,8 +4,11 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"log/slog"
+
+	"github.com/Alrwx/Cadence/services/gateway/internal/models"
 )
 
 // flight is one in-progress synthesis that concurrent callers for the same key wait on.
@@ -16,9 +19,21 @@ type flight struct {
 }
 
 // clipFor returns a clip of text in the current voice and locale, synthesizing it only if no clip exists yet.
-// Concurrent requests for the same key share one /tts call (AGENTS(GH).md §7: never synthesize a phrase twice).
+// If the model service no longer knows the cloned voice, it switches to the default voice for good (loseVoice)
+// and makes the clip in that instead, so the user can still speak.
 func (o *Orchestrator) clipFor(ctx context.Context, text, locale string) (string, error) {
 	voice := o.voice()
+	id, err := o.clipIn(ctx, voice, text, locale)
+	if voice != defaultVoiceID && errors.Is(err, models.ErrUnknownVoice) {
+		o.loseVoice(voice)
+		return o.clipIn(ctx, defaultVoiceID, text, locale)
+	}
+	return id, err
+}
+
+// clipIn returns a clip of text in voice. Concurrent requests for the same key share one /tts call
+// (AGENTS(GH).md §7: never synthesize a phrase twice).
+func (o *Orchestrator) clipIn(ctx context.Context, voice, text, locale string) (string, error) {
 	id, ok, err := o.store.ClipID(ctx, voice, locale, text)
 	if err != nil {
 		return "", err

@@ -2,6 +2,7 @@ package models
 
 import (
 	"context"
+	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -65,5 +66,39 @@ func TestCreateVoiceReportsModelErrors(t *testing.T) {
 	_, err := New(srv.URL).CreateVoice(context.Background(), VoiceSample{Data: []byte("x"), FileName: "a.webm"}, "consent_1")
 	if err == nil || !strings.Contains(err.Error(), "422") || !strings.Contains(err.Error(), "ffmpeg failed") {
 		t.Fatalf("err = %v", err)
+	}
+	if errors.Is(err, ErrUnavailable) {
+		t.Fatal("a rejected sample is not an unavailable model service")
+	}
+}
+
+// A model service that is still loading (503) or not running at all is ErrUnavailable, so the gateway can
+// tell the phone to retry instead of blaming the sample.
+func TestCreateVoiceUnavailable(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Error(w, `{"detail":"tts is loading"}`, http.StatusServiceUnavailable)
+	}))
+	defer srv.Close()
+	sample := VoiceSample{Data: []byte("x"), FileName: "a.webm"}
+	if _, err := New(srv.URL).CreateVoice(context.Background(), sample, "consent_1"); !errors.Is(err, ErrUnavailable) {
+		t.Fatalf("503: err = %v, want ErrUnavailable", err)
+	}
+
+	down := httptest.NewServer(http.NotFoundHandler())
+	url := down.URL
+	down.Close()
+	if _, err := New(url).CreateVoice(context.Background(), sample, "consent_1"); !errors.Is(err, ErrUnavailable) {
+		t.Fatalf("unreachable: err = %v, want ErrUnavailable", err)
+	}
+}
+
+func TestTTSUnknownVoice(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Error(w, `{"detail":"unknown voiceId mlx_gone"}`, http.StatusNotFound)
+	}))
+	defer srv.Close()
+	_, err := New(srv.URL).TTS(context.Background(), "mlx_gone", "Yes", "en")
+	if !errors.Is(err, ErrUnknownVoice) {
+		t.Fatalf("err = %v, want ErrUnknownVoice", err)
 	}
 }

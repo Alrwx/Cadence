@@ -18,7 +18,8 @@ import (
 	"github.com/Alrwx/Cadence/services/gateway/internal/store"
 )
 
-// defaultVoiceID is used until the person records a voice on the phone (POST /api/voices).
+// defaultVoiceID is the model service's built-in generic voice: used until the person records a voice on the
+// phone (POST /api/voices), and whenever they switch to it with voice.use.
 const defaultVoiceID = "default"
 
 type Orchestrator struct {
@@ -30,8 +31,13 @@ type Orchestrator struct {
 	personID string
 	locale   string
 
-	voiceMu sync.RWMutex
-	voiceID string // model service voiceId every clip is synthesized in; changed by SetVoice
+	// The voice clips are made in (see voice.go). Never held while sending.
+	voiceMu     sync.RWMutex
+	clonedVoice string // model service voiceId of the person's cloned voice; "" if none
+	useDefault  bool   // the person chose the generic voice (voice.use) over the cloned one
+
+	voiceRefreshing atomic.Bool // refreshVoice is sending the voice to the sessions
+	voiceDirty      atomic.Bool // the voice changed while it was
 
 	mu    sync.Mutex
 	state map[string]*sessionState
@@ -61,7 +67,7 @@ type sessionState struct {
 func New(st *store.Store, mc *models.Client, cc *clips.Cache, personID, locale string) *Orchestrator {
 	return &Orchestrator{
 		store: st, models: mc, clips: cc,
-		personID: personID, locale: locale, voiceID: defaultVoiceID,
+		personID: personID, locale: locale,
 		state: map[string]*sessionState{}, inflight: map[string]*flight{},
 	}
 }
@@ -74,35 +80,9 @@ func (o *Orchestrator) OnConnect(s *hub.Session, role hub.Role) {
 	ss.mu.Unlock()
 	ctx := context.Background()
 	_ = s.Send(ctx, role, protocol.TypeState, turnID, protocol.StateData{State: string(state)})
+	_ = s.Send(ctx, role, protocol.TypeVoice, "", o.voiceStatus())
 	if role == hub.Headset {
 		o.sendPhrases(ctx, s)
-		go o.warmClips()
-	}
-}
-
-// voice is the model service voiceId clips are synthesized in.
-func (o *Orchestrator) voice() string {
-	o.voiceMu.RLock()
-	defer o.voiceMu.RUnlock()
-	return o.voiceID
-}
-
-// SetVoice switches every session to a newly cloned voice. Clips are cached per voice, so the headset's
-// phrases show as not ready until warmClips has synthesized them in the new voice.
-func (o *Orchestrator) SetVoice(voiceID string) {
-	o.voiceMu.Lock()
-	changed := o.voiceID != voiceID
-	o.voiceID = voiceID
-	o.voiceMu.Unlock()
-	if !changed {
-		return
-	}
-	sessions := o.hubSessions()
-	ctx := context.Background()
-	for _, s := range sessions {
-		o.sendPhrases(ctx, s)
-	}
-	if len(sessions) > 0 {
 		go o.warmClips()
 	}
 }
@@ -178,6 +158,8 @@ func (o *Orchestrator) OnEvent(s *hub.Session, from hub.Role, env protocol.Envel
 	case *protocol.PhraseSpeakData, *protocol.PhraseSaveData, *protocol.PhraseDeleteData,
 		*protocol.PhraseGroupSaveData, *protocol.PhraseGroupDeleteData:
 		o.onPhraseEvent(ctx, s, ss, d)
+	case *protocol.VoiceUseData:
+		o.useVoice(ctx, s, from, d.Voice)
 	default:
 		slog.Info("event not handled yet", "session", s.ID, "type", env.Type)
 	}
@@ -232,8 +214,13 @@ func (o *Orchestrator) apply(ctx context.Context, s *hub.Session, ss *sessionSta
 	return true
 }
 
+// sendError sends a recoverable error to the headset, where the user sees it.
 func (o *Orchestrator) sendError(ctx context.Context, s *hub.Session, code, message string) {
-	_ = s.Send(ctx, hub.Headset, protocol.TypeError, "", protocol.ErrorData{Code: code, Message: message, Recoverable: true})
+	o.sendErrorTo(ctx, s, hub.Headset, code, message)
+}
+
+func (o *Orchestrator) sendErrorTo(ctx context.Context, s *hub.Session, role hub.Role, code, message string) {
+	_ = s.Send(ctx, role, protocol.TypeError, "", protocol.ErrorData{Code: code, Message: message, Recoverable: true})
 }
 
 func (o *Orchestrator) session(id string) *sessionState {

@@ -5,7 +5,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
 	"mime/multipart"
 	"net/http"
 	"net/textproto"
@@ -26,6 +25,8 @@ type VoiceSample struct {
 }
 
 // CreateVoice clones a voice from sample (POST /voices) and returns the model service's voiceId.
+// ErrUnavailable means the service is down or still loading its models; any other *StatusError means it
+// rejected the sample.
 func (c *Client) CreateVoice(ctx context.Context, sample VoiceSample, consentID string) (string, error) {
 	ctx, cancel := context.WithTimeout(ctx, VoiceTimeout)
 	defer cancel()
@@ -65,12 +66,11 @@ func (c *Client) CreateVoice(ctx context.Context, sample VoiceSample, consentID 
 	req.Header.Set("Content-Type", form.FormDataContentType())
 	resp, err := c.HTTP.Do(req)
 	if err != nil {
-		return "", fmt.Errorf("POST /voices: %w", err)
+		return "", transportError(ctx, http.MethodPost, "/voices", err)
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode >= 300 {
-		msg, _ := io.ReadAll(io.LimitReader(resp.Body, 512))
-		return "", fmt.Errorf("POST /voices: %s: %s", resp.Status, msg)
+		return "", statusError(http.MethodPost, "/voices", resp)
 	}
 	var out struct {
 		VoiceID string `json:"voiceId"`
