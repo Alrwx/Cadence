@@ -75,5 +75,8 @@
   "settings.both": "Both",
   "settings.holdTime": "Hold time",
   "settings.seconds": "{n} s",
+  "settings.panels": "Buttons",
+  "settings.glass": "Glass",
+  "settings.solid": "Solid",
   "settings.done": "Done"
 }

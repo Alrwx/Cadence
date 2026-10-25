@@ -16,3 +16,6 @@ export const dwellTargets = new Map<string, DwellTarget>();
 
 /** The target under the head reticle, for highlighting. */
 export const useHeadHover = create<{ id: string | null }>(() => ({ id: null }));
+
+/** How far the dwell on `id` has got (0 to 1). Written every frame, so it's a plain object, not a store. */
+export const dwellProgress: { id: string | null; value: number } = { id: null, value: 0 };
