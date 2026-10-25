@@ -117,6 +117,7 @@ cmd_status() {
 	dns="$(ts_dns)"
 	ip="$(tailscale ip -4 2>/dev/null | head -n 1)" || true
 	[[ -n "$dns" ]] && echo "  tailnet:  https://$dns:$GATEWAY_PORT/headset/   https://$dns:$GATEWAY_PORT/phone/"
+	[[ -n "$dns" ]] && echo "  bench:    https://$dns:$GATEWAY_PORT/phone/test.html   (phone + stand-in headset, no Quest)"
 	[[ -n "$ip" ]] && echo "  tailnet:  https://$ip:$GATEWAY_PORT/headset/"
 	echo "  tunnel:   ssh -N -L $GATEWAY_PORT:localhost:$GATEWAY_PORT $USER@${dns:-$(hostname)}  then https://localhost:$GATEWAY_PORT/headset/"
 }

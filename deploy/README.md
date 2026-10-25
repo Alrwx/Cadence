@@ -2,11 +2,11 @@
 
 This runs the whole stack on pserver (the RTX 3080 box) as three systemd user services. You don't need a terminal running `make dev`, and testers open one URL from any device on the tailnet.
 
-| Service | What it runs | Address |
-|---|---|---|
-| `cadence-ollama` | Ollama with Gemma loaded and kept in memory | `127.0.0.1:11434` (local only) |
-| `cadence-models` | `services/models` on the CUDA backend | `127.0.0.1:8000` (local only) |
-| `cadence-gateway` | `services/gateway`: `/ws`, `/api`, `/clips`, and the built apps at `/headset/` and `/phone/` | `:8443` (HTTPS) |
+| Service           | What it runs                                                                                 | Address                        |
+| ----------------- | -------------------------------------------------------------------------------------------- | ------------------------------ |
+| `cadence-ollama`  | Ollama with Gemma loaded and kept in memory                                                  | `127.0.0.1:11434` (local only) |
+| `cadence-models`  | `services/models` on the CUDA backend                                                        | `127.0.0.1:8000` (local only)  |
+| `cadence-gateway` | `services/gateway`: `/ws`, `/api`, `/clips`, and the built apps at `/headset/` and `/phone/` | `:8443` (HTTPS)                |
 
 The services start in that order. `cadence-ollama` loads Gemma before the model service starts, because on the 10 GB card Gemma only fits fully on the GPU if it loads before TTS. Restarting Ollama restarts the model service too, so the order holds.
 
@@ -78,6 +78,7 @@ Then reload the page on the test device. `deploy` waits for the models and finis
 
 - Headset: `https://debian.tailbcbf3f.ts.net:8443/headset/?session=demo`
 - Phone: `https://debian.tailbcbf3f.ts.net:8443/phone/?session=demo`
+- Test bench (no Quest needed): `https://debian.tailbcbf3f.ts.net:8443/phone/test.html?session=demo`. This is the phone page next to a clickable stand-in headset, and you can type what the listener said. Typing needs `DEV_TOOLS=1`, which is the default.
 
 Use the same `?session=<id>` on both to pair them; it defaults to `demo`. Pick your own id if someone else is testing at the same time.
 
@@ -87,9 +88,9 @@ Use the same `?session=<id>` on both to pair them; it defaults to `demo`. Pick y
 scp pserver@debian.tailbcbf3f.ts.net:.local/share/mkcert/rootCA.pem .
 ```
 
-- **Mac:** double-click `rootCA.pem`, then in Keychain Access open it and set *Trust → Always Trust*.
-- **iPhone:** AirDrop or email the file, install the profile in *Settings → General → VPN & Device Management*, then turn it on under *Settings → General → About → Certificate Trust Settings*.
-- **Android:** *Settings → Security → Encryption & credentials → Install a certificate → CA certificate*.
+- **Mac:** double-click `rootCA.pem`, then in Keychain Access open it and set _Trust → Always Trust_.
+- **iPhone:** AirDrop or email the file, install the profile in _Settings → General → VPN & Device Management_, then turn it on under _Settings → General → About → Certificate Trust Settings_.
+- **Android:** _Settings → Security → Encryption & credentials → Install a certificate → CA certificate_.
 - **Quest:** there's no practical way to install a CA, so accept the warning once in Quest Browser.
 
 Keep `rootCA.pem` to the team: anyone with the matching key (on pserver only) can mint certs those devices trust. Never copy `rootCA-key.pem`.
@@ -110,18 +111,16 @@ Keep `rootCA.pem` to the team: anyone with the matching key (on pserver only) ca
 
   Alternatively, install the Tailscale app on the phone and use the tailnet URL.
 
-**Desktop test bench.** The test bench is the phone page plus a clickable stand-in headset and "type for the listener" (`apps/phone/test.html`). It's served by the Vite dev server only, so the gateway doesn't have it yet. To use it against the deployed gateway, run `pnpm --filter @cadence/phone dev` on pserver, tunnel port 5174, and open `https://localhost:5174/phone/test.html`. The dev server proxies `/ws` and `/clips` to the gateway on 8443.
-
 ## Troubleshooting
 
-| Symptom | Fix |
-|---|---|
-| `port 8000 is already in use` | Something started by hand still holds the port. Kill the PID it prints and run `deploy` again. |
-| Status shows `models /health` stuck on `loading` or `error` | Run `deploy/cadence.sh logs models`. "Ollama not ready" errors retry on their own. Anything else is a real load failure. |
-| Suggestions got slow (~850 ms instead of ~380 ms) | Gemma reloaded after TTS and only partly fits on the GPU. Check `deploy/cadence.sh logs ollama` for `offloaded N/43`; anything under 43 means this. Run `systemctl --user restart cadence-ollama`, which restarts the model service after it. |
-| TTS runs out of CUDA memory | Something else is using the GPU (`nvidia-smi`). Stop it and run `deploy/cadence.sh restart`. |
-| Cert warning even with the CA installed | You're using a name or IP the cert doesn't cover, e.g. after an IP change. Run `deploy/cadence.sh certs`; it restarts the gateway with the new cert. |
-| `gateway /healthz` says the model service is unreachable | The gateway is up but the model service isn't. Run `deploy/cadence.sh logs models`. |
+| Symptom                                                     | Fix                                                                                                                                                                                                                                           |
+| ----------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `port 8000 is already in use`                               | Something started by hand still holds the port. Kill the PID it prints and run `deploy` again.                                                                                                                                                |
+| Status shows `models /health` stuck on `loading` or `error` | Run `deploy/cadence.sh logs models`. "Ollama not ready" errors retry on their own. Anything else is a real load failure.                                                                                                                      |
+| Suggestions got slow (~850 ms instead of ~380 ms)           | Gemma reloaded after TTS and only partly fits on the GPU. Check `deploy/cadence.sh logs ollama` for `offloaded N/43`; anything under 43 means this. Run `systemctl --user restart cadence-ollama`, which restarts the model service after it. |
+| TTS runs out of CUDA memory                                 | Something else is using the GPU (`nvidia-smi`). Stop it and run `deploy/cadence.sh restart`.                                                                                                                                                  |
+| Cert warning even with the CA installed                     | You're using a name or IP the cert doesn't cover, e.g. after an IP change. Run `deploy/cadence.sh certs`; it restarts the gateway with the new cert.                                                                                          |
+| `gateway /healthz` says the model service is unreachable    | The gateway is up but the model service isn't. Run `deploy/cadence.sh logs models`.                                                                                                                                                           |
 
 The services log to the user journal: `journalctl --user -u cadence-gateway --since "10 min ago"`.
 
