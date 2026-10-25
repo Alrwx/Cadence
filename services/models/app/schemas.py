@@ -37,6 +37,8 @@ class SuggestRequest(BaseModel):
     history: list[Turn]
     style: Style = Style()
     context: list[ContextItem] = []
+    memories: list[str] = []
+    locale: str = "en"
     n: int = Field(default=3, ge=1, le=5)
 
 
@@ -53,7 +55,8 @@ class SuggestResponse(BaseModel):
 
 class TtsRequest(BaseModel):
     voiceId: str
-    text: str
+    text: str = Field(min_length=1, max_length=400)
+    locale: str = "en"
 
 
 class VoiceCreated(BaseModel):
@@ -62,6 +65,7 @@ class VoiceCreated(BaseModel):
 
 class SummarizeRequest(BaseModel):
     turns: list[Turn]
+    locale: str = "en"
 
 
 class SummarizeResponse(BaseModel):
