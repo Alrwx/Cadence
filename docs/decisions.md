@@ -63,7 +63,34 @@ Append-only. One entry per decision: date, decision, why, who.
 **Why:** All three models fit in the 3080's 10 GB with about 250 MB to spare, and `/suggest` takes 389 ms p50, well under the 1.5 s budget (`docs/latency.md`). Without expandable segments, TTS ran out of memory in one of two benchmark runs. The margin is thin: if a batch of 4 or a longer context breaks it, switch Whisper to faster-whisper int8 (an estimated 1 GB less, not yet measured) before moving Gemma to another machine.
 **Who:** PaoloAJ (Dev 3)
 
+### 2026-10-24 – The robot voice is a `voice.use` switch; a lost cloned voice falls back to it
+**Decision:**
+- Added `voice.use { voice: "cloned" | "default" }` (phone or headset → gw) and `voice { active, cloned }` (gw → both, on connect and after any change). The gateway keeps the cloned voice and the "use the generic voice" choice apart, so switching for demo step 6 and back never loses the clone. Uploading a new voice switches back to it. The choice lives in memory only; a restart starts on the cloned voice.
+- If `/tts` answers 404 for the cloned voice (the model service lost its files), the gateway makes that clip in `"default"`, stays on `"default"` until a new voice is recorded or the gateway restarts, tells the headset (`error voice_missing`), and broadcasts `voice` with `cloned: false`.
+- `POST /api/voices` answers `503 models_unavailable` when the model service is unreachable or still loading, and keeps `502 model_error` for a sample the model service rejected.
+**Why:** Demo step 6 needs a one-tap contrast. Without the fallback, a wiped voices folder made every clip fail until someone re-recorded. The phone should only ask for a new recording when the recording was the problem.
+**Who:** Dev 4
+
+### 2026-10-24 – `DELETE /api/voices` revokes voice consent and deletes the voice everywhere
+**Decision:**
+- `DELETE /api/voices` (phone, same origin rule as the other `/api` routes) revokes every unrevoked `voice_clone` consent of the person, then, for every voice under a revoked consent, deletes the model service's copy (`DELETE /voices/{id}`, 404 counts as done), the clip-cache rows and WAV files for that voiceId, and the `voice_profile` row. Sessions switch to `"default"`. Answers `204`, or `502 model_error` if the model service couldn't delete its copy.
+- Order: revoke first (from then on `ActiveVoice` ignores the voice, even after a restart), then the model copy, then the clip files, then their rows, then the profile. The profile row is kept when the model delete fails, as the only record of which model voice to delete, so a repeated `DELETE` finishes the job. Consent rows stay, with `revoked_at` set, as the record of what was agreed and when it was withdrawn.
+- The orchestrator remembers revoked voiceIds in memory: it never uses or caches a clip in one again, and a synthesis already running when the revoke lands deletes its own clip.
+- `voice_profile` inserts check in the same statement that the consent is still active. An upload whose consent is withdrawn while the model service clones gets `403 no_consent`, and the gateway deletes the new model voice. It also deletes it if saving the profile fails for any other reason.
+**Why:** §2: revoking consent deletes the voice and all of its clips. The clip cache has no FK to `voice_profile` (migration 002), so the delete happens in code, ordered so a crash at any step leaves no usable voice under a revoked consent.
+**Who:** Dev 4
+
+### 2026-10-24 – Speculative `/suggest` is reused when the final has the same words
+**Decision:** The gateway calls `/suggest` on a partial transcript after 400 ms with no new words. When the final arrives, it reuses that answer only if (a) the final and the partial match after normalizing (lowercase, punctuation and symbols removed except apostrophes inside words, whitespace collapsed), and (b) the earlier turns sent with it are unchanged. Otherwise the speculative call is cancelled and `/suggest` runs on the final. A speculative answer is never shown before the final; it becomes the turn's suggestions through the usual final → SUGGESTING → CHOOSING path.
+**Why:** Partials and finals from Whisper often differ only in case, commas, or a closing "?" or ".", and none of that changes which replies fit. Stripping all punctuation rather than only trailing punctuation catches the comma differences too. Any change in the words means the speaker said something else, so the answer is redone instead of guessing. The `speculation` metric (`hit`/`miss`/`none`/`failed`) shows how often this pays off.
+**Who:** Alvin (Dev 4)
+
 ### 2026-10-25 – Saved conversations belong to the person; revoking store_chat deletes them too
 **Decision:** Migration 004 rebuilds `saved_conversation` with `person_id` and `started_at` instead of a `session_id` foreign key, and adds a `memory` table. Revoking `store_chat` deletes every memory *and* every saved conversation. Memories reach `/suggest` by the keyword rule in §7 (at most 5 sharing a content word with the last 3 turns); attached conversations always do. A saved conversation is the turns since the last save or since the last 10-minute silence, whichever is later (the protocol has no "conversation started" event, and `?session=demo` is reused all day); the gateway keeps up to 200 turns in memory for it.
 **Why:** The gateway writes no `session` rows, so every insert failed the foreign key, and session ids are client-chosen and reused (`?session=demo`) while a saved conversation is attached in later sessions. Both tables hold summaries of conversation content, which §2 allows only while `store_chat` is granted.
+**Who:** David (Dev 4)
+
+### 2026-10-25 – `turn` rows never hold text, even with store_chat
+**Decision:** `store.AddTurn` writes only the session, speaker and time; `turn.text` stays NULL whatever the consent. Conversation content reaches SQLite only as the summaries in `memory` and `saved_conversation`.
+**Why:** The headset asks "Save short summaries of what's said?" for `store_chat`, and §7 says the transcript behind a memory or saved conversation is never written to disk. Storing every turn's text under that consent would keep full transcripts the person never agreed to, and revoking wouldn't remove them. The `turn` rows still give the metrics their speaker and timing.
 **Who:** David (Dev 4)

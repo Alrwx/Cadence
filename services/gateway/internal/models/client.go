@@ -6,6 +6,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -97,16 +98,21 @@ func (c *Client) Summarize(ctx context.Context, turns []Turn, locale string) (st
 	return resp.Summary, err
 }
 
-// TTS returns WAV bytes for text in the given voice and locale.
+// TTS returns WAV bytes for text in the given voice and locale. A voiceId the model service doesn't know
+// (404) is ErrUnknownVoice.
 func (c *Client) TTS(ctx context.Context, voiceID, text, locale string) ([]byte, error) {
 	ctx, cancel := context.WithTimeout(ctx, TTSTimeout)
 	defer cancel()
 	var wav []byte
 	err := c.do(ctx, http.MethodPost, "/tts", map[string]string{"voiceId": voiceID, "text": text, "locale": locale}, &wav)
+	var se *StatusError
+	if errors.As(err, &se) && se.Code == http.StatusNotFound {
+		return nil, fmt.Errorf("%w %q: %w", ErrUnknownVoice, voiceID, err)
+	}
 	return wav, err
 }
 
-// do sends body as JSON and decodes the response into out (raw bytes when out is *[]byte).
+// do sends body as JSON and decodes the response into out (raw bytes when out is *[]byte, ignored when nil).
 func (c *Client) do(ctx context.Context, method, path string, body, out any) error {
 	var reader io.Reader
 	if body != nil {
@@ -125,12 +131,14 @@ func (c *Client) do(ctx context.Context, method, path string, body, out any) err
 	}
 	resp, err := c.HTTP.Do(req)
 	if err != nil {
-		return fmt.Errorf("%s %s: %w", method, path, err)
+		return transportError(ctx, method, path, err)
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode >= 300 {
-		msg, _ := io.ReadAll(io.LimitReader(resp.Body, 512))
-		return fmt.Errorf("%s %s: %s: %s", method, path, resp.Status, msg)
+		return statusError(method, path, resp)
+	}
+	if out == nil {
+		return nil
 	}
 	if raw, ok := out.(*[]byte); ok {
 		*raw, err = io.ReadAll(resp.Body)

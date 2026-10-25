@@ -112,6 +112,7 @@ func TestOnlySummariesReachTheDB(t *testing.T) {
 		t.Fatalf("/summarize got %+v; want the last minute, then the whole session", reqs)
 	}
 
+	o.writer.flush() // turn rows are written off the event path
 	for _, transcript := range []string{fakeUtterance, oldNews} {
 		if where := tablesContaining(t, o.store.DB, transcript); len(where) > 0 {
 			t.Errorf("transcript %q written to %v", transcript, where)
@@ -255,47 +256,65 @@ func tablesContaining(t *testing.T, db *sql.DB, needle string) []string {
 }
 
 func TestMemoriesAndAttachedSummariesReachSuggest(t *testing.T) {
-	fm := &fakeModels{}
-	o, headset, phone := pairedSession(t, fm)
-	ctx := context.Background()
-	consent := grantStoreChat(t, o)
-	related := "Their daughter is visiting today at 5 pm."
-	for _, summary := range []string{related, "The TV remote is on the shelf."} {
-		if _, err := o.store.AddMemory(ctx, o.personID, consent, summary); err != nil {
-			t.Fatal(err)
-		}
-	}
-	lee, err := o.store.SaveConversation(ctx, o.personID, consent, "Dr. Lee", "Started lisinopril for blood pressure.", 1)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err := o.store.SaveConversation(ctx, o.personID, consent, "Dentist", "Not attached.", 2); err != nil {
-		t.Fatal(err)
-	}
+	for _, speculate := range []bool{false, true} {
+		t.Run(fmt.Sprintf("speculative=%v", speculate), func(t *testing.T) {
+			fm := &fakeModels{}
+			var configure []func(*Orchestrator)
+			if speculate {
+				fm.sttScript = make(chan string)
+				configure = append(configure, func(o *Orchestrator) { o.speculateAfter = 20 * time.Millisecond })
+			}
+			o, headset, phone := pairedSession(t, fm, configure...)
+			ctx := context.Background()
+			consent := grantStoreChat(t, o)
+			related := "Their daughter is visiting today at 5 pm."
+			for _, summary := range []string{related, "The TV remote is on the shelf."} {
+				if _, err := o.store.AddMemory(ctx, o.personID, consent, summary); err != nil {
+					t.Fatal(err)
+				}
+			}
+			lee, err := o.store.SaveConversation(ctx, o.personID, consent, "Dr. Lee", "Started lisinopril for blood pressure.", 1)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if _, err := o.store.SaveConversation(ctx, o.personID, consent, "Dentist", "Not attached.", 2); err != nil {
+				t.Fatal(err)
+			}
 
-	headset.send(protocol.TypeConversationAttach, protocol.ConversationAttachData{ConversationIDs: []string{lee.ID, lee.ID}})
-	// compose.start and cancel on the same socket are a barrier: once COMPOSING arrives, the attach was handled.
-	headset.send(protocol.TypeComposeStart, protocol.ComposeStartData{})
-	headset.expectState("COMPOSING")
-	headset.send(protocol.TypeCancel, protocol.CancelData{})
-	headset.expectState("LISTENING")
+			headset.send(protocol.TypeConversationAttach, protocol.ConversationAttachData{ConversationIDs: []string{lee.ID, lee.ID}})
+			// compose.start and cancel on the same socket are a barrier: once COMPOSING arrives, the attach was handled.
+			headset.send(protocol.TypeComposeStart, protocol.ComposeStartData{})
+			headset.expectState("COMPOSING")
+			headset.send(protocol.TypeCancel, protocol.CancelData{})
+			headset.expectState("LISTENING")
 
-	hearUtterance(headset, phone)
-	var sugg protocol.SuggestionsData
-	headset.expect(protocol.TypeSuggestions, &sugg, nil)
-	reqs := fm.suggestRequests()
-	if len(reqs) != 1 {
-		t.Fatalf("%d /suggest calls, want 1", len(reqs))
-	}
-	got := reqs[0]
-	if !reflect.DeepEqual(got.Memories, []string{related}) {
-		t.Errorf("memories = %q, want only the one that shares a word with %q", got.Memories, fakeUtterance)
-	}
-	if want := []models.ContextItem{{Label: "Dr. Lee", Summary: "Started lisinopril for blood pressure."}}; !reflect.DeepEqual(got.Context, want) {
-		t.Errorf("context = %+v, want %+v (once, though attached twice)", got.Context, want)
-	}
-	if got.Locale != store.DefaultLocale {
-		t.Errorf("locale = %q", got.Locale)
+			if speculate {
+				// A speculation hit reuses the call made on the partial, so that call has to carry the context too.
+				phone.sendAudio(make([]byte, 640))
+				fm.sttScript <- sttMsg("partial", strings.TrimSuffix(fakeUtterance, "?"))
+				eventually(t, "speculative /suggest call", func() bool { return len(fm.suggestRequests()) == 1 })
+				fm.sttScript <- sttMsg("final", fakeUtterance)
+				headset.expectState("SUGGESTING")
+			} else {
+				hearUtterance(headset, phone)
+			}
+			var sugg protocol.SuggestionsData
+			headset.expect(protocol.TypeSuggestions, &sugg, nil)
+			reqs := fm.suggestRequests()
+			if len(reqs) != 1 {
+				t.Fatalf("%d /suggest calls, want 1", len(reqs))
+			}
+			got := reqs[0]
+			if !reflect.DeepEqual(got.Memories, []string{related}) {
+				t.Errorf("memories = %q, want only the one that shares a word with %q", got.Memories, fakeUtterance)
+			}
+			if want := []models.ContextItem{{Label: "Dr. Lee", Summary: "Started lisinopril for blood pressure."}}; !reflect.DeepEqual(got.Context, want) {
+				t.Errorf("context = %+v, want %+v (once, though attached twice)", got.Context, want)
+			}
+			if got.Locale != store.DefaultLocale {
+				t.Errorf("locale = %q", got.Locale)
+			}
+		})
 	}
 }
 

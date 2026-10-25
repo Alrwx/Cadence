@@ -95,6 +95,7 @@ func (o *Orchestrator) readSTT(s *hub.Session, ss *sessionState, stream *models.
 	for ev := range stream.Events() {
 		switch ev.Kind {
 		case "partial":
+			o.onPartial(s, ss, ev.Text) // every partial, before the caption rate limit
 			if time.Since(lastPartial) < partialInterval || o.stateOf(ss) == session.Speaking {
 				continue
 			}
@@ -104,6 +105,7 @@ func (o *Orchestrator) readSTT(s *hub.Session, ss *sessionState, stream *models.
 			o.onFinal(s, ss, ev.Text)
 		}
 	}
+	o.dropSpeculation(ss)
 	o.endSTT(s, ss, stream)
 }
 
@@ -123,7 +125,12 @@ func (o *Orchestrator) stateOf(ss *sessionState) session.State {
 // playing (the phone's own speaker) are dropped. If the user is already choosing or composing, the caption is
 // shown but no new turn starts.
 func (o *Orchestrator) onFinal(s *hub.Session, ss *sessionState, text string) {
+	finalAt := time.Now()
+	spec := o.takeSpeculation(ss) // the utterance is over: reuse its speculative /suggest or cancel it
 	if st := o.stateOf(ss); st == session.Idle || st == session.Speaking {
+		if spec != nil {
+			spec.cancel()
+		}
 		return
 	}
 	ctx := context.Background()
@@ -131,10 +138,15 @@ func (o *Orchestrator) onFinal(s *hub.Session, ss *sessionState, text string) {
 
 	turnCtx, turnID, history, ok := o.beginTurn(ss, text)
 	if !ok {
+		if spec != nil {
+			spec.cancel()
+		}
 		return
 	}
+	spec, specOutcome := matchSpeculation(spec, text, history)
+	o.recordTurn(s.ID, "other")
 	s.Broadcast(ctx, protocol.TypeState, turnID, protocol.StateData{State: string(session.Suggesting)})
-	go o.suggest(turnCtx, s, ss, turnID, history)
+	go o.suggest(turnCtx, s, ss, turnID, history, finalAt, spec, specOutcome)
 }
 
 // beginTurn records what the other person said and moves LISTENING -> SUGGESTING under a new turn id.
@@ -161,12 +173,42 @@ func (o *Orchestrator) beginTurn(ss *sessionState, text string) (context.Context
 
 // suggest asks the model service for replies and, if the turn is still current, shows them on the headset
 // and starts synthesizing them so the one that gets picked is usually ready to play.
-func (o *Orchestrator) suggest(ctx context.Context, s *hub.Session, ss *sessionState, turnID string, history []models.Turn) {
-	memories, attached := o.suggestContext(ss, history)
-	resp, err := o.models.Suggest(ctx, models.SuggestRequest{
-		TurnID: turnID, History: history, Style: models.Style{Phrases: []string{}},
-		Context: attached, Memories: memories, Locale: o.locale, N: suggestCount,
-	})
+// finalAt is when the STT final arrived, for the final_to_suggestions metric. spec, if not nil, is a
+// speculative /suggest for this same utterance (matchSpeculation) whose answer is used instead of a new call;
+// if it fails, a new call is made after all.
+func (o *Orchestrator) suggest(ctx context.Context, s *hub.Session, ss *sessionState, turnID string, history []models.Turn,
+	finalAt time.Time, spec *specCall, specOutcome string) {
+	var resp models.SuggestResponse
+	var err error
+	reused := false
+	if spec != nil {
+		defer spec.cancel()
+		select {
+		case <-spec.done:
+		case <-ctx.Done():
+			o.record(s.ID, metricSpeculation, -1, specOutcome)
+			return // the turn was cancelled or superseded while the speculative call was still running
+		}
+		if spec.err != nil {
+			specOutcome = "failed"
+		} else {
+			resp, reused = spec.resp, true
+		}
+	}
+	o.record(s.ID, metricSpeculation, -1, specOutcome)
+	if !reused {
+		memories, attached := o.suggestContext(ss, history)
+		start := time.Now()
+		resp, err = o.models.Suggest(ctx, models.SuggestRequest{
+			TurnID: turnID, History: history, Style: models.Style{Phrases: []string{}},
+			Context: attached, Memories: memories, Locale: o.locale, N: suggestCount,
+		})
+		outcome := suggestOutcome(ctx, err)
+		if err == nil && len(resp.Items) == 0 {
+			outcome = "empty"
+		}
+		o.recordSince(s.ID, metricSuggest, start, outcome)
+	}
 	if ctx.Err() != nil {
 		return // cancelled or superseded: the turn moved on
 	}
@@ -208,6 +250,7 @@ func (o *Orchestrator) suggest(ctx context.Context, s *hub.Session, ss *sessionS
 	if !ok {
 		return
 	}
+	o.recordSince(s.ID, metricFinalToSuggestions, finalAt, specOutcome) // so hits and misses can be compared
 	_ = s.Send(bg, hub.Headset, protocol.TypeSuggestions, turnID, protocol.SuggestionsData{Items: out})
 	s.Broadcast(bg, protocol.TypeState, turnID, protocol.StateData{State: string(next)})
 	for _, item := range pending {
@@ -239,7 +282,7 @@ func (o *Orchestrator) finishSuggesting(ss *sessionState, turnID string, in sess
 // turn's cancellation: if the user picks this reply meanwhile, speak() shares this synthesis (see clipFor), and
 // a finished clip is cached for next time either way.
 func (o *Orchestrator) prepareSuggestion(s *hub.Session, ss *sessionState, turnID string, item protocol.SuggestionsItem) {
-	ctx := context.Background()
+	ctx, _ := withTTSPurpose(context.Background(), s.ID, "suggestion")
 	if _, err := o.clipFor(ctx, item.Text, o.locale); err != nil {
 		slog.Warn("prepare suggestion", "session", s.ID, "turn", turnID, "err", err)
 		return

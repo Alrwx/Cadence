@@ -5,7 +5,7 @@ import { Quaternion, Vector3, type Mesh } from "three";
 import { selection } from "../config.ts";
 import { headEnabled, useSettings } from "../settings.ts";
 import { DwellTracker, pickTarget, type Rect } from "./dwell.ts";
-import { dwellTargets, useHeadHover, type DwellTarget } from "./targets.ts";
+import { dwellProgress, dwellTargets, useHeadHover, type DwellTarget } from "./targets.ts";
 
 const DEG = Math.PI / 180;
 const RING_OUTER = 0.012;
@@ -33,6 +33,7 @@ function Reticle() {
   useEffect(
     () => () => {
       useHeadHover.setState({ id: null });
+      Object.assign(dwellProgress, { id: null, value: 0 });
     },
     [],
   );
@@ -54,6 +55,7 @@ function Reticle() {
       appeared,
     );
     if (useHeadHover.getState().id !== update.hover) useHeadHover.setState({ id: update.hover });
+    Object.assign(dwellProgress, { id: update.hover, value: update.progress });
     if (update.fired) dwellTargets.get(update.fired)?.press();
     fill.current?.scale.setScalar(Math.max(update.progress, 1e-3));
   });

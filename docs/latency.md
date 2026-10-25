@@ -9,6 +9,8 @@ Measured numbers only (AGENTS(GH).md §9). Targets: instant < 1 s, suggested rep
 | | M4 Pro 24 GB | `/tts` (40-char reply) | | | |
 | | Hotspot | select → sound (end to end) | | | |
 
+**Gateway numbers.** The gateway records every `/suggest` and `/tts` call, STT final → suggestions sent, and selection → `audio.play` sent in its `metric` table (latencies and selection types only). After a rehearsal, `curl -k https://<host>:8443/api/metrics/summary` returns count, p50, p95 and max per metric, overall (detail `*`) and per detail; add `?since=<unix ms>` to skip a warm-up. `select_to_play` split by `:cached` / `:synthesized` shows how often the clip was ready. Metric names are listed in `docs/dev4.md`. The phone's playback and the network aren't in these numbers, so select → sound still needs a stopwatch or a video.
+
 <!-- bench_tts:start -->
 ## RTX 3080 server: Qwen3-TTS voice cloning (CUDA)
 

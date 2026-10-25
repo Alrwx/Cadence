@@ -4,11 +4,12 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
-	"io"
 	"mime/multipart"
 	"net/http"
 	"net/textproto"
+	"net/url"
 	"time"
 )
 
@@ -26,6 +27,8 @@ type VoiceSample struct {
 }
 
 // CreateVoice clones a voice from sample (POST /voices) and returns the model service's voiceId.
+// ErrUnavailable means the service is down or still loading its models; any other *StatusError means it
+// rejected the sample.
 func (c *Client) CreateVoice(ctx context.Context, sample VoiceSample, consentID string) (string, error) {
 	ctx, cancel := context.WithTimeout(ctx, VoiceTimeout)
 	defer cancel()
@@ -65,12 +68,11 @@ func (c *Client) CreateVoice(ctx context.Context, sample VoiceSample, consentID 
 	req.Header.Set("Content-Type", form.FormDataContentType())
 	resp, err := c.HTTP.Do(req)
 	if err != nil {
-		return "", fmt.Errorf("POST /voices: %w", err)
+		return "", transportError(ctx, http.MethodPost, "/voices", err)
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode >= 300 {
-		msg, _ := io.ReadAll(io.LimitReader(resp.Body, 512))
-		return "", fmt.Errorf("POST /voices: %s: %s", resp.Status, msg)
+		return "", statusError(http.MethodPost, "/voices", resp)
 	}
 	var out struct {
 		VoiceID string `json:"voiceId"`
@@ -82,4 +84,20 @@ func (c *Client) CreateVoice(ctx context.Context, sample VoiceSample, consentID 
 		return "", fmt.Errorf("POST /voices: empty voiceId")
 	}
 	return out.VoiceID, nil
+}
+
+// DeleteVoiceTimeout covers removing the voice's folder and its cached prompt.
+const DeleteVoiceTimeout = 10 * time.Second
+
+// DeleteVoice deletes a cloned voice from the model service (DELETE /voices/{voiceId}). A voice the service
+// doesn't have (404) counts as deleted.
+func (c *Client) DeleteVoice(ctx context.Context, voiceID string) error {
+	ctx, cancel := context.WithTimeout(ctx, DeleteVoiceTimeout)
+	defer cancel()
+	err := c.do(ctx, http.MethodDelete, "/voices/"+url.PathEscape(voiceID), nil, nil)
+	var se *StatusError
+	if errors.As(err, &se) && se.Code == http.StatusNotFound {
+		return nil
+	}
+	return err
 }
