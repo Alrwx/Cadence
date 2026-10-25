@@ -64,6 +64,33 @@ HTTPS is required: WebXR and the phone's microphone don't work on plain HTTP off
 
 With the tunnel up, **don't run `make models` or `make dev`**. Both start a model service on port 8000, which the tunnel already holds. Start the gateway and the two frontends yourself (below).
 
+#### Port 8000 is already taken
+
+If step 2 fails with `bind [127.0.0.1]:8000: Address already in use`, see what holds the port:
+
+```sh
+ss -ltnp | grep ':8000'
+```
+
+- **It's an `ssh` process and `/health` answers:** you're already connected, probably from an earlier session or another terminal. Skip step 2; there's nothing to do.
+- **It's an `ssh` process but `/health` hangs or fails:** the tunnel is stale (the laptop slept, or Wi-Fi or Tailscale dropped). Kill it and open it again:
+
+  ```sh
+  pkill -f 'L 8000:127.0.0.1:8000'
+  ```
+
+  Then repeat step 2.
+- **It's `uvicorn` or `python`:** a model service is running locally, usually the mock from `make models` or `make dev` in another worktree. Stop it with Ctrl-C in its terminal, or with `kill <pid>` using the pid from `ss`, then repeat step 2.
+- **You need to keep whatever is on 8000:** tunnel to another local port and point the gateway at it:
+
+  ```sh
+  ssh -f -N -o ExitOnForwardFailure=yes -o ServerAliveInterval=15 \
+    -L 8001:127.0.0.1:8000 <user>@<3080-tailscale-ip>
+  make gateway MODELS_URL=http://127.0.0.1:8001
+  ```
+
+  Pass `MODELS_URL` as a `make` argument as shown, not as `MODELS_URL=… make gateway`. The `MODELS_URL` in `.env` overrides an environment variable, but not a `make` argument.
+
 Audio and transcripts go to the 3080 over the tunnel. That's our own machine, not a third-party API, but it does leave the laptop.
 
 ### B. Mock models (no GPU, no network)
