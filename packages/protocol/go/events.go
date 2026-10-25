@@ -26,6 +26,7 @@ const (
 	TypeConsentSet           = "consent.set"
 	TypeConversationAttach   = "conversation.attach"
 	TypeConversationDelete   = "conversation.delete"
+	TypeConversationReset    = "conversation.reset"
 	TypeConversationSave     = "conversation.save"
 	TypeConversations        = "conversations"
 	TypeError                = "error"
@@ -96,6 +97,10 @@ type ConversationAttachData struct {
 // ConversationDeleteData: (Stretch) Delete a saved conversation and everything derived from it. (headset → gateway)
 type ConversationDeleteData struct {
 	ConversationID string `json:"conversationId"`
+}
+
+// ConversationResetData: Start this session's conversation over: forget what was said, drop pending replies, and detach saved conversations. (headset → gateway)
+type ConversationResetData struct {
 }
 
 // ConversationSaveData: (Stretch) Save the current conversation; rejected without store_chat consent. (headset → gateway)
@@ -276,6 +281,8 @@ func NewData(eventType string) (any, bool) {
 		return &ConversationAttachData{}, true
 	case TypeConversationDelete:
 		return &ConversationDeleteData{}, true
+	case TypeConversationReset:
+		return &ConversationResetData{}, true
 	case TypeConversationSave:
 		return &ConversationSaveData{}, true
 	case TypeConversations:

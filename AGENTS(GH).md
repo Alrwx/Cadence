@@ -240,6 +240,7 @@ Every JSON event has this envelope:
 | `conversations` | gw → headset | `{ items: [{ id, label, startedAt, summary? }] }` |
 | `conversation.attach` | headset → gw | `{ conversationIds: [] }` (use as context for this session) |
 | `conversation.delete` | headset → gw | `{ conversationId }` |
+| `conversation.reset` | headset → gw | `{}` (forget this session's transcript, drop pending replies, detach attached conversations; saved conversations and memories stay) |
 
 **Stretch (quick memories):**
 

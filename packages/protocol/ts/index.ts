@@ -47,6 +47,9 @@ export interface ConversationDeleteData {
   conversationId: string;
 }
 
+/** Start this session's conversation over: forget what was said, drop pending replies, and detach saved conversations. (headset → gateway) */
+export type ConversationResetData = Record<string, never>;
+
 /** (Stretch) Save the current conversation; rejected without store_chat consent. (headset → gateway) */
 export interface ConversationSaveData {
   label: string;
@@ -212,6 +215,7 @@ export const EVENT_TYPES = [
   "consent.set",
   "conversation.attach",
   "conversation.delete",
+  "conversation.reset",
   "conversation.save",
   "conversations",
   "error",
@@ -249,6 +253,7 @@ export interface EventDataMap {
   "consent.set": ConsentSetData;
   "conversation.attach": ConversationAttachData;
   "conversation.delete": ConversationDeleteData;
+  "conversation.reset": ConversationResetData;
   "conversation.save": ConversationSaveData;
   "conversations": ConversationsData;
   "error": ErrorData;

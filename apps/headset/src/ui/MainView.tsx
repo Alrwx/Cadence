@@ -1,12 +1,12 @@
-// Suggested replies, instant phrases, "Type my own", and the way into saved phrases.
-import { useEffect } from "react";
-import { gesturePhrases } from "../config.ts";
+// Suggested replies, instant phrases, "Type my own", the way into saved phrases, and starting the conversation over.
+import { useEffect, useState } from "react";
+import { gesturePhrases, layout } from "../config.ts";
 import { useConsent } from "../consent.ts";
 import { useListener } from "../layout/ListenerAnchor.tsx";
 import type { Gesture } from "../gestures/classify.ts";
 import { fireGesture } from "../gestures/HandGestures.tsx";
 import { useMemories } from "../memories.ts";
-import { send, useCadence, useHeadset } from "../session.ts";
+import { resetConversation, send, useCadence, useHeadset } from "../session.ts";
 import { t } from "../strings.ts";
 import { Button3D } from "./Button3D.tsx";
 import { remember } from "./ConsentView.tsx";
@@ -15,6 +15,7 @@ import { notify, NOTICE_MS, showView, startCompose, useView } from "./views.ts";
 
 const INSTANT_Y = -0.01;
 const SAVED_Y = -0.105;
+const SAVED_STEP = 0.25;
 
 export function MainView() {
   const listenerPlaced = useListener((s) => s.spot !== null);
@@ -23,9 +24,10 @@ export function MainView() {
       {!listenerPlaced && <Replies />}
       <InstantRow />
       <group position={[0, SAVED_Y, 0]}>
-        <Button3D label={t("main.savedPhrases")} width={0.24} color="#8a6a2a" position={[-0.25, 0, 0]} onPress={() => showView({ kind: "saved" })} />
+        <Button3D label={t("main.savedPhrases")} width={0.24} color="#8a6a2a" position={[-1.5 * SAVED_STEP, 0, 0]} onPress={() => showView({ kind: "saved" })} />
         <BookmarkButton />
         <RememberButton />
+        <ResetButton />
       </group>
     </>
   );
@@ -61,7 +63,7 @@ function BookmarkButton() {
       label={t("main.bookmark")}
       width={0.24}
       color="#5a4a2a"
-      position={[0, 0, 0]}
+      position={[-0.5 * SAVED_STEP, 0, 0]}
       disabled={!lastSpoken || !group}
       onPress={() => {
         if (!lastSpoken || !group) return;
@@ -93,13 +95,39 @@ function RememberButton() {
       label={justSaved ? t("memories.undo") : t("memories.remember")}
       width={0.24}
       color={justSaved ? "#a33a2e" : "#2e6b7d"}
-      position={[0.25, 0, 0]}
+      position={[0.5 * SAVED_STEP, 0, 0]}
       onPress={() => {
         if (justSaved) {
           send("memory.delete", { memoryId: justSaved.id });
           useMemories.setState({ justSaved: null });
         } else if (storeChat) remember();
         else showView({ kind: "consent" });
+      }}
+    />
+  );
+}
+
+/** Forgets what was said and detaches saved conversations, so replies start fresh. Takes a second press. */
+function ResetButton() {
+  const [confirming, setConfirming] = useState(false);
+
+  useEffect(() => {
+    if (!confirming) return;
+    const timer = setTimeout(() => setConfirming(false), layout.confirmMs);
+    return () => clearTimeout(timer);
+  }, [confirming]);
+
+  return (
+    <Button3D
+      label={confirming ? t("main.confirmReset") : t("main.reset")}
+      width={0.24}
+      color={confirming ? "#a33a2e" : "#3d4a5c"}
+      position={[1.5 * SAVED_STEP, 0, 0]}
+      onPress={() => {
+        if (!confirming) return setConfirming(true);
+        setConfirming(false);
+        resetConversation();
+        notify(t("status.reset"));
       }}
     />
   );

@@ -257,6 +257,11 @@ function handle(s: Session, from: Role, event: CadenceEvent): void {
     case "conversation.attach":
       console.log("mock: attached conversations", event.data.conversationIds);
       break;
+    case "conversation.reset":
+      s.heard = [];
+      console.log("mock: conversation reset, attached conversations cleared");
+      if (s.unlocked) send(s, "all", "state", { state: "LISTENING" });
+      break;
     case "memory.save":
       saveMemory(s, from);
       break;
