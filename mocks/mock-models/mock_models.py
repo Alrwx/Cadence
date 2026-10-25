@@ -13,7 +13,7 @@ import struct
 import wave
 from typing import Annotated, Any
 
-from fastapi import FastAPI, File, Form, Response, UploadFile, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, File, Form, HTTPException, Response, UploadFile, WebSocket, WebSocketDisconnect
 
 SUGGEST_MS = int(os.getenv("MOCK_SUGGEST_MS", "600"))
 TTS_MS = int(os.getenv("MOCK_TTS_MS", "900"))
@@ -90,9 +90,12 @@ async def tts(req: dict[str, Any]) -> Response:
 @app.post("/voices")
 async def create_voice(
     audio: Annotated[UploadFile, File()],
-    transcript: Annotated[str, Form()],
-    consentId: Annotated[str, Form()],
+    consentId: Annotated[str, Form()] = "",
+    transcript: Annotated[str | None, Form()] = None,  # optional (§6.2): the real service transcribes the sample
+    locale: Annotated[str, Form()] = "en",
 ) -> dict[str, str]:
+    if not consentId:
+        raise HTTPException(status_code=400, detail="consentId is required")
     return {"voiceId": f"mock_voice_{next(_voices)}"}
 
 
