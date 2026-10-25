@@ -81,3 +81,17 @@ How to read this:
 </details>
 
 <!-- bench_tts:end -->
+
+<!-- bench_pipeline:start -->
+## Pipeline: RTX 3080 server
+
+Measured 2026-10-24 on **RTX 3080 server** (Linux x86_64), backend `cuda`, by `services/models/scripts/bench_pipeline.py` over HTTP/WebSocket (20 turns, warm). Values are p50 / p95 / max in ms.
+
+| Step | p50 / p95 / max (ms) | Notes |
+|---|---|---|
+| STT final after the speaker stops | 620 / 775 / 830 | includes the VAD's 700 ms end-of-speech wait; 20/20 transcripts had ≥ 80% of the words |
+| `/suggest` | n/a | not measured: Ollama wasn't ready |
+| `/tts`, 3 suggestions at once | 2161 / 2558 / 3190 | until the last of the 3 clips is back; batched |
+| `/tts`, one reply | 1824 / 2303 / 2482 | RTF p50 1.42 inside batches |
+| `/tts`, instant phrase | 1439 / 1825 / 1919 | the gateway's clip cache serves repeats without this |
+<!-- bench_pipeline:end -->
