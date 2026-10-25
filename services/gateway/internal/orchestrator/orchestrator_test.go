@@ -629,15 +629,16 @@ func TestResetForgetsTheConversation(t *testing.T) {
 	phone.sendAudio(make([]byte, 640))
 	fm.sttScript <- sttMsg("final", "Hello there")
 	headset.expectState("CHOOSING")
+	headset.send(protocol.TypeConversationAttach, protocol.ConversationAttachData{ConversationIDs: []string{"cv_1"}})
 	headset.send(protocol.TypeConversationReset, protocol.ConversationResetData{})
 	headset.expectState("LISTENING")
 
 	ss := o.session("s1")
 	ss.mu.Lock()
-	left, offered := len(ss.history), len(ss.suggestions)
+	left, offered, attached := len(ss.history), len(ss.suggestions), len(ss.attached)
 	ss.mu.Unlock()
-	if left != 0 || offered != 0 {
-		t.Fatalf("%d turns and %d suggestions after reset, want none", left, offered)
+	if left != 0 || offered != 0 || attached != 0 {
+		t.Fatalf("%d turns, %d suggestions and %d attached after reset, want none", left, offered, attached)
 	}
 
 	// The next utterance is suggested for on its own.

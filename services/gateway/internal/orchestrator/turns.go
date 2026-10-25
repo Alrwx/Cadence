@@ -43,12 +43,14 @@ func (ss *sessionState) addTurnLocked(speaker, text string) {
 	}
 }
 
-// resetConversation forgets what was said this session, so the next suggestions start fresh. Replies being
-// fetched or chosen are dropped; the keyboard and a reply already playing are left alone.
+// resetConversation forgets what was said this session and detaches saved conversations, so the next
+// suggestions start fresh. Replies being fetched or chosen are dropped; the keyboard and a reply already
+// playing are left alone.
 func (o *Orchestrator) resetConversation(ctx context.Context, s *hub.Session, ss *sessionState) {
 	o.dropSpeculation(ss)
 	ss.mu.Lock()
 	ss.history = nil
+	ss.attached = nil
 	st := ss.machine.State()
 	ss.mu.Unlock()
 	if st == session.Suggesting || st == session.Choosing {
