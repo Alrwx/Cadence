@@ -22,7 +22,7 @@ Read this before working on `services/models`, before calling the model service 
 ### Backends (`app/backends/`)
 - **`cuda.py` (RTX 3080), verified on the 3080:** Whisper large-v3-turbo through transformers (fp16, SDPA), plus Qwen3-TTS 0.6B Base through qwen-tts (bf16, FlashAttention 2).
 - **`mlx.py` (demo Mac), written but never run:** mlx-whisper and mlx-audio's Qwen3-TTS port. I wrote it against the mlx-whisper 0.4.3 and mlx-audio 0.5.8 sources, but there's no Mac here. **It needs its first run on the M4 Pro** (see [Not done](#not-done-priority-order)).
-- **`ollama.py` (both machines):** suggestions and summaries. I could only test it against a fake Ollama: installing Ollama on the 3080 wasn't approved in this session.
+- **`ollama.py` (both machines):** suggestions and summaries. Verified on the 3080 against Ollama v0.40.2 with `gemma4:e4b`.
 - Shared, backend-independent code:
   - `stt_stream.py`: VAD + partial/final scheduling.
   - `tts.py`: voice store on disk, the worker thread that owns the model, and batching.
@@ -37,11 +37,13 @@ Read this before working on `services/models`, before calling the model service 
 - `scripts/bench_pipeline.py`, 20 turns over HTTP/WS, results in `docs/latency.md`:
   - STT final 620 ms p50 after the speaker stops, with 20/20 transcripts correct.
   - 3 suggestion clips 2.2 s p50 (batched), one reply 1.8 s.
+  - Rerun with Gemma on the same GPU: `/suggest` 389 ms p50, 3 suggestion clips 3.2 s p50 (Gemma's replies are longer; speed per second of audio is unchanged).
 - **The gateway from PR #13 (`gateway/voice-routes`) against this service:**
   - `POST /api/consent` → `POST /api/voices` with a webm/opus sample (what Chrome's MediaRecorder sends) returned a voiceId in 355 ms.
   - The gateway switched voices and re-warmed its 10 phrases in the new voice. `instant yes` reached the phone as `audio.play` in 468 ms.
   - An unknown consent id gets `403 no_consent`.
-- VRAM with STT and TTS loaded and warm: 8.2 GB of the 3080's 10 GB, as reported by nvidia-smi for the process.
+- VRAM with STT and TTS loaded and warm: 8.2 GB of the 3080's 10 GB, as reported by nvidia-smi for the process. Most of that was PyTorch's cache: with Gemma loaded first, the same service peaks at 5.2 GB.
+- **All three models on the 3080 (Ollama installed in `~/.local/opt/ollama-v0.40.2`, no sudo):** Gemma 4.8 GB + model service 5.2 GB, peak 9,994 of 10,240 MiB. Needs `expandable_segments` (now the CUDA default); without it TTS ran out of memory in one of two runs. Details and the load-order caveat are in `docs/latency.md`.
 
 ### Mock (`mocks/mock-models`)
 - `/voices` takes an optional `transcript` and `locale`, and returns 400 without a `consentId`, same as the real service.
@@ -63,7 +65,7 @@ Read this before working on `services/models`, before calling the model service 
   - the mlx-audio loader name (`mlx_audio.tts.utils.load`)
   - `batch_generate` keyword names
   - the dtype of the returned audio
-- [ ] **First real `/suggest`.** Needs Ollama running with `gemma4:e4b`. Check two things:
+- [ ] **First real `/suggest` on the Mac.** Done on the 3080: 389 ms p50, and replies to yes/no questions included a yes/no option in spot checks. Still to check on the M4 Pro:
   - Latency stays well under the gateway's 3 s timeout. Budget: < 1.5 s (§4 assumption).
   - Reply quality, including a clear yes/no reply after yes/no questions.
 
@@ -71,7 +73,7 @@ Read this before working on `services/models`, before calling the model service 
 - [ ] **Old `.env` files.** Clear `STT_MODEL` and `TTS_MODEL` (empty = the backend's default). The old values are the MLX Whisper repo and the PyTorch Qwen repo, and each one is wrong on one of the two backends.
 
 ### P1
-- [ ] **3080 VRAM budget with Gemma.** The model service takes 8.2 GB, so Gemma 4 E4B in Ollama won't fit beside it on the GPU; Ollama will spill to CPU. That only matters if the 3080 is used for the demo (§11 open question). Options: `SUGGEST_MODEL=gemma4:e2b`, or `STT_MODEL=openai/whisper-small`.
+- [ ] **3080 VRAM margin with Gemma (about 250 MB).** It fits with `expandable_segments` (see `docs/latency.md`), but a batch of 4 beside Gemma and a cold start of the whole stack are untested. If the margin breaks: faster-whisper int8 first, then `SUGGEST_MODEL=gemma4:e2b`.
 - [ ] **Hallucination guard for STT.** Only no-letter outputs are dropped. If Whisper invents text on noise in the room (TV, hallway), add a no-speech check.
 
 ### P2: stretch
