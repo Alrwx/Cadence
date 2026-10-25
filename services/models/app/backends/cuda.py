@@ -3,6 +3,7 @@
 torch is imported inside load(), so the module imports (and the tests run) without the extra installed.
 """
 
+import gc
 import importlib.util
 import logging
 import os
@@ -17,6 +18,13 @@ from app.locale import language_code
 os.environ.setdefault("PYTORCH_CUDA_ALLOC_CONF", "expandable_segments:True")
 
 log = logging.getLogger("models.cuda")
+
+
+def _free(torch: Any) -> None:
+    """After an out-of-memory error, drop what the failed call still holds (its traceback keeps the activations
+    alive until the next full GC) and return it to the driver, so the next call, or Whisper, has room again."""
+    gc.collect()
+    torch.cuda.empty_cache()
 
 
 class CudaStt:
@@ -36,6 +44,15 @@ class CudaStt:
         self.transcribe(np.zeros(16000, dtype=np.float32), "en")
 
     def transcribe(self, audio: np.ndarray, locale: str) -> str:
+        try:
+            return self._transcribe(audio, locale)
+        except self.torch.OutOfMemoryError:
+            pass
+        log.warning("stt out of GPU memory; freeing and retrying once")
+        _free(self.torch)
+        return self._transcribe(audio, locale)
+
+    def _transcribe(self, audio: np.ndarray, locale: str) -> str:
         features = self.processor(audio, sampling_rate=16000, return_tensors="pt").input_features
         with self.torch.inference_mode():
             ids = self.model.generate(
@@ -61,12 +78,26 @@ class CudaTts:
         if importlib.util.find_spec("flash_attn"):
             kwargs["attn_implementation"] = "flash_attention_2"
         log.info("loading %s (attention: %s)", self.model_id, kwargs.get("attn_implementation", "default"))
+        self.torch = torch
         self.model = Qwen3TTSModel.from_pretrained(self.model_id, **kwargs)
 
     def make_prompt(self, ref_audio: np.ndarray, ref_text: str) -> Any:
         return self.model.create_voice_clone_prompt(ref_audio=(ref_audio, self.sample_rate), ref_text=ref_text)
 
     def generate(self, prompt: Any, texts: list[str], language: str, max_tokens: int) -> list[np.ndarray]:
+        """A batch needs more memory than one clip (more so with a long reference clip), so a batch that runs out
+        is retried one clip at a time instead of failing every request in it."""
+        try:
+            return self._generate(prompt, texts, language, max_tokens)
+        except self.torch.OutOfMemoryError:
+            pass  # free outside the except block, where the error and its traceback are already gone
+        _free(self.torch)
+        if len(texts) == 1:
+            raise RuntimeError("TTS ran out of GPU memory")
+        log.warning("tts batch=%d out of GPU memory; retrying one at a time", len(texts))
+        return [wav for text in texts for wav in self._generate(prompt, [text], language, max_tokens)]
+
+    def _generate(self, prompt: Any, texts: list[str], language: str, max_tokens: int) -> list[np.ndarray]:
         wavs, sr = self.model.generate_voice_clone(
             text=texts, language=language, voice_clone_prompt=prompt, max_new_tokens=max_tokens
         )
