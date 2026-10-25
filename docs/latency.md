@@ -89,9 +89,24 @@ Measured 2026-10-24 on **RTX 3080 server** (Linux x86_64), backend `cuda`, by `s
 
 | Step | p50 / p95 / max (ms) | Notes |
 |---|---|---|
-| STT final after the speaker stops | 620 / 775 / 830 | includes the VAD's 700 ms end-of-speech wait; 20/20 transcripts had ≥ 80% of the words |
-| `/suggest` | n/a | not measured: Ollama wasn't ready |
-| `/tts`, 3 suggestions at once | 2161 / 2558 / 3190 | until the last of the 3 clips is back; batched |
-| `/tts`, one reply | 1824 / 2303 / 2482 | RTF p50 1.42 inside batches |
-| `/tts`, instant phrase | 1439 / 1825 / 1919 | the gateway's clip cache serves repeats without this |
+| STT final after the speaker stops | 713 / 771 / 773 | from the end of the clip, so the clip's own trailing silence counts toward the VAD's 700 ms end-of-speech wait; 20/20 transcripts had ≥ 80% of the words |
+| `/suggest` | 389 / 436 / 459 | Gemma 4 via Ollama |
+| `/tts`, 3 suggestions at once | 3184 / 3785 / 3857 | until the last of the 3 clips is back; batched |
+| `/tts`, one reply | 2902 / 3798 / 3826 | alone; in the batches, wall time ÷ audio length per clip was 1.42 (p50) |
+| `/tts`, instant phrase | 1475 / 1981 / 2297 | the gateway's clip cache serves repeats without this |
 <!-- bench_pipeline:end -->
+
+## RTX 3080 server: Gemma, Whisper and Qwen3-TTS on one GPU
+
+Measured 2026-10-24 with Ollama v0.40.2 serving `gemma4:e4b` (Q4_K_M, context 4096, `keep_alive: -1`) next to the model service (`MODELS_BACKEND=cuda`, Whisper large-v3-turbo + Qwen3-TTS 0.6B Base). GPU memory is nvidia-smi, polled every 0.2 s during `bench_pipeline.py`.
+
+| | GPU memory |
+|---|---|
+| Gemma in Ollama | 4.8 GB |
+| Model service at rest / after TTS | 4.2 GB / 5.0–5.2 GB |
+| Peak, whole GPU | 9,994 of 10,240 MiB |
+
+- **Without `expandable_segments`, TTS ran out of memory.** One of two 20-turn runs got `torch.OutOfMemoryError` on `/tts` (needed 184 MiB, 161 MiB free, ~400 MiB reserved by PyTorch but unusable). With `PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True`, now the CUDA backend's default, two runs (40 turns) had no errors. The pipeline table above is the second of those runs.
+- **The margin is about 250 MB.** The benchmark sends 3 clips per batch; the service allows up to 4 (`TTS_MAX_BATCH`), and a batch of 4 with long phrases hasn't been tested beside Gemma.
+- **Load order matters.** If Gemma loads after the TTS allocator has grown, only 33 of 43 layers go on the GPU and `/suggest` slows from ~380 ms to ~850 ms. `ollama ps` still says "100% GPU"; check `offloaded N/43` in Ollama's log. In these runs Gemma was loaded before the model service started. The service's own startup loads TTS and warms Gemma in parallel, which should also give 43/43 but hasn't been tested from a cold start; `keep_alive: -1` keeps Gemma resident, so this only bites if Ollama restarts mid-session. Then restart the model service after Gemma is back.
+- **Why TTS is slower than in the run without Gemma** (3.2 s against 2.2 s for 3 clips): the clips are longer. Speed per second of audio is unchanged (1.42 against 1.42 earlier). The earlier run had no `/suggest`, so it voiced different replies.

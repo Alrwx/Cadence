@@ -47,3 +47,9 @@ Append-only. One entry per decision: date, decision, why, who.
 **Decision:** `/tts` requests for the same voice and language that arrive within 30 ms are synthesized as one batch (up to 4).
 **Why:** On the 3080, 3 suggestions batched take 2.2 s, against about 1.8 s for one reply and 5–8 s for three in a row (`docs/latency.md`). Without batching, the third clip can exceed the gateway's 6 s `/tts` timeout. The gateway gets this for free when it requests the 3 suggestion clips concurrently.
 **Who:** PaoloAJ (Dev 3)
+
+### 2026-10-24 – Gemma 4 E4B shares the 3080 with STT and TTS, with expandable segments
+**Decision:** On the 3080, Ollama serves `gemma4:e4b` on the same GPU as the model service, and the CUDA backend sets `PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True` by default.
+**Why:** All three models fit in the 3080's 10 GB with about 250 MB to spare, and `/suggest` takes 389 ms p50, well under the 1.5 s budget (`docs/latency.md`). Without expandable segments, TTS ran out of memory in one of two benchmark runs. The margin is thin: if a batch of 4 or a longer context breaks it, switch Whisper to faster-whisper int8 (an estimated 1 GB less, not yet measured) before moving Gemma to another machine.
+**Who:** PaoloAJ (Dev 3)
+

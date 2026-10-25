@@ -5,11 +5,16 @@ torch is imported inside load(), so the module imports (and the tests run) witho
 
 import importlib.util
 import logging
+import os
 from typing import Any
 
 import numpy as np
 
 from app.locale import language_code
+
+# With Gemma in Ollama on the same 10 GB GPU, TTS ran out of memory while ~400 MB sat reserved but unusable.
+# Expandable segments let PyTorch reuse that memory (docs/latency.md). Must be set before torch touches CUDA.
+os.environ.setdefault("PYTORCH_CUDA_ALLOC_CONF", "expandable_segments:True")
 
 log = logging.getLogger("models.cuda")
 
