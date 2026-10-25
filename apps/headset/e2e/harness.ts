@@ -4,7 +4,9 @@ import type { CadenceStore } from "@cadence/shared";
 import type { Page } from "@playwright/test";
 import type { XRStore } from "@react-three/xr";
 import type { XRDevice } from "iwer";
+import { Quaternion, Vector3 } from "three";
 import type { useHeadset } from "../src/session.ts";
+import type { useListener } from "../src/layout/ListenerAnchor.tsx";
 import type { useRecenter } from "../src/layout/UIAnchor.tsx";
 import type { InputMode, useSettings } from "../src/settings.ts";
 import type { useView } from "../src/ui/views.ts";
@@ -16,6 +18,7 @@ declare global {
       useHeadset: typeof useHeadset;
       useSettings: typeof useSettings;
       useRecenter: typeof useRecenter;
+      useListener: typeof useListener;
       useView: typeof useView;
       xrStore: XRStore;
       emulator: XRDevice;
@@ -59,6 +62,18 @@ export async function targetCenter(page: Page, label: string): Promise<Vec3> {
 
 export async function lookAt(page: Page, label: string): Promise<void> {
   await remote(page, "look_at", { device: "headset", target: await targetCenter(page, label) });
+}
+
+/** Angle in degrees between where the head looks and the direction from the head to a button. */
+export async function angleFromGaze(page: Page, label: string): Promise<number> {
+  const head = (await remote(page, "get_transform", { device: "headset" })) as {
+    position: Vec3;
+    orientation: { x: number; y: number; z: number; w: number };
+  };
+  const { x, y, z, w } = head.orientation;
+  const gaze = new Vector3(0, 0, -1).applyQuaternion(new Quaternion(x, y, z, w));
+  const toButton = new Vector3().copy(await targetCenter(page, label)).sub(new Vector3().copy(head.position));
+  return (gaze.angleTo(toButton) * 180) / Math.PI;
 }
 
 /** Points the right hand's ray at a button from a comfortable spot in front of the user, then pinches. */

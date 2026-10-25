@@ -8,6 +8,7 @@ import { UIAnchor } from "./layout/UIAnchor.tsx";
 import { HeadPointer } from "./selection/HeadPointer.tsx";
 import { useCadence } from "./session.ts";
 import { DebugPanel } from "./ui/DebugPanel.tsx";
+import { ListenerReplies } from "./ui/ListenerReplies.tsx";
 import { Panels } from "./ui/Panels.tsx";
 import { xrStore } from "./xr.ts";
 
@@ -36,6 +37,7 @@ export function App() {
             <Panels />
             {debugEnabled && <DebugPanel />}
           </UIAnchor>
+          <ListenerReplies />
           <HandGestures />
           <HeadPointer />
           <OnFirstFrame run={() => setSceneReady(true)} />
