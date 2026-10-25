@@ -154,6 +154,8 @@ func (o *Orchestrator) OnEvent(s *hub.Session, from hub.Role, env protocol.Envel
 		o.apply(ctx, s, ss, session.ComposeStart)
 	case *protocol.CancelData:
 		o.apply(ctx, s, ss, session.Cancel)
+	case *protocol.ConversationResetData:
+		o.resetConversation(ctx, s, ss)
 	case *protocol.AudioDoneData:
 		o.apply(ctx, s, ss, session.ClipDone)
 	case *protocol.ComposeSubmitData:

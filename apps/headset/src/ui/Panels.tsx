@@ -39,10 +39,16 @@ export function Panels() {
   else content = <MainView />;
 
   const showTopBar = sessionState !== "COMPOSING" && view.kind !== "settings";
+  // Each view's own Back sits low, often below the field of view, so the way home is always up here too.
+  const showHome = sessionState !== "COMPOSING" && view.kind !== "main";
   return (
     <group position={layout.panelOffset} rotation={[PANEL_TILT, 0, 0]}>
       <StatusLine />
       {showTopBar && <ListenerPrompt />}
+      {/* Clear of Recenter and Conversations, and nothing takes its spot on the main view, so a dwell can't carry over. */}
+      {showHome && (
+        <Button3D label={t("top.home")} width={0.16} height={0.045} color={QUIET} position={[-0.2, 0.27, 0]} onPress={() => showView({ kind: "main" })} />
+      )}
       {showTopBar && (
         <>
           <Button3D label={t("top.recenter")} width={0.14} height={0.045} color={QUIET} position={[-0.4, 0.27, 0]} onPress={requestRecenter} />

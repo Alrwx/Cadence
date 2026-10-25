@@ -622,6 +622,34 @@ func TestStaleSuggestionsAreDropped(t *testing.T) {
 	}
 }
 
+func TestResetForgetsTheConversation(t *testing.T) {
+	fm := &fakeModels{sttScript: make(chan string)}
+	o, headset, phone := pairedSession(t, fm)
+
+	phone.sendAudio(make([]byte, 640))
+	fm.sttScript <- sttMsg("final", "Hello there")
+	headset.expectState("CHOOSING")
+	headset.send(protocol.TypeConversationAttach, protocol.ConversationAttachData{ConversationIDs: []string{"cv_1"}})
+	headset.send(protocol.TypeConversationReset, protocol.ConversationResetData{})
+	headset.expectState("LISTENING")
+
+	ss := o.session("s1")
+	ss.mu.Lock()
+	left, offered, attached := len(ss.history), len(ss.suggestions), len(ss.attached)
+	ss.mu.Unlock()
+	if left != 0 || offered != 0 || attached != 0 {
+		t.Fatalf("%d turns, %d suggestions and %d attached after reset, want none", left, offered, attached)
+	}
+
+	// The next utterance is suggested for on its own.
+	fm.sttScript <- sttMsg("final", "How was lunch")
+	headset.expectState("CHOOSING")
+	reqs := fm.suggestRequests()
+	if last := reqs[len(reqs)-1]; len(last.History) != 1 {
+		t.Fatalf("/suggest history after reset = %+v, want only the new utterance", last.History)
+	}
+}
+
 func TestSuggestFailureKeepsInstantPhrasesWorking(t *testing.T) {
 	fm := &fakeModels{suggestFail: true}
 	_, headset, phone := pairedSession(t, fm)

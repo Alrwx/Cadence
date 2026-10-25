@@ -43,6 +43,21 @@ func (ss *sessionState) addTurnLocked(speaker, text string) {
 	}
 }
 
+// resetConversation forgets what was said this session and detaches saved conversations, so the next
+// suggestions start fresh. Replies being fetched or chosen are dropped; the keyboard and a reply already
+// playing are left alone.
+func (o *Orchestrator) resetConversation(ctx context.Context, s *hub.Session, ss *sessionState) {
+	o.dropSpeculation(ss)
+	ss.mu.Lock()
+	ss.history = nil
+	ss.attached = nil
+	st := ss.machine.State()
+	ss.mu.Unlock()
+	if st == session.Suggesting || st == session.Choosing {
+		o.apply(ctx, s, ss, session.Cancel)
+	}
+}
+
 // sttStream returns the session's open STT stream, dialing one if needed. After a failed dial it returns nil
 // until sttRetryAfter has passed (or the phone unlocks again), so a down model service isn't dialed per frame.
 func (o *Orchestrator) sttStream(s *hub.Session, ss *sessionState) *models.STTStream {

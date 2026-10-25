@@ -61,7 +61,10 @@ export async function targetCenter(page: Page, label: string): Promise<Vec3> {
 }
 
 export async function lookAt(page: Page, label: string): Promise<void> {
-  await remote(page, "look_at", { device: "headset", target: await targetCenter(page, label) });
+  const target = await targetCenter(page, label);
+  // A button that appears under the gaze never fires, so let the head pointer see it before looking at it.
+  await waitFrames(page, 2);
+  await remote(page, "look_at", { device: "headset", target });
 }
 
 /** Angle in degrees between where the head looks and the direction from the head to a button. */

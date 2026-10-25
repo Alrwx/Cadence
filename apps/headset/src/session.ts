@@ -4,7 +4,7 @@ import type { CadenceState } from "@cadence/shared";
 import type { EventDataMap, EventType } from "@cadence/protocol";
 import { create, useStore } from "zustand";
 import { useConsent } from "./consent.ts";
-import { receiveConversations } from "./conversations.ts";
+import { receiveConversations, useConversations } from "./conversations.ts";
 import { receiveMemories } from "./memories.ts";
 
 export const store = createCadenceStore();
@@ -51,4 +51,12 @@ export function send<T extends EventType>(type: T, data: EventDataMap[T], turnId
 /** Records a choice to speak; only replies and typed messages are worth bookmarking. */
 export function rememberSpeech(text: string, bookmarkable: boolean): void {
   useHeadset.setState((s) => ({ speaking: text, lastSpoken: bookmarkable ? text : s.lastSpoken }));
+}
+
+/** Starts the conversation over, here and on the gateway: no captions, replies, attachments, or reply to bookmark. */
+export function resetConversation(): void {
+  send("conversation.reset", {});
+  store.setState({ partial: "", captions: [], suggestions: [] });
+  useHeadset.setState({ lastSpoken: null });
+  useConversations.setState({ attached: [] });
 }
