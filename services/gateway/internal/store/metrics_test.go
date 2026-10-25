@@ -6,62 +6,18 @@ import (
 	"testing"
 )
 
-func TestTurnTextNeedsStoreChatConsent(t *testing.T) {
+func TestAddTurnCreatesTheSession(t *testing.T) {
 	ctx := context.Background()
 	s := openTest(t)
 	if _, err := s.EnsurePerson(ctx, "p1", "Pat", DefaultLocale); err != nil {
 		t.Fatal(err)
 	}
-	text := func(speaker string) sql.NullString {
-		t.Helper()
-		var v sql.NullString
-		if err := s.DB.QueryRow(`SELECT text FROM turn WHERE speaker = ? ORDER BY ts DESC LIMIT 1`, speaker).Scan(&v); err != nil {
-			t.Fatal(err)
-		}
-		return v
-	}
-
-	if ok, err := s.HasConsent(ctx, "p1", ConsentStoreChat); err != nil || ok {
-		t.Fatalf("HasConsent before any consent = %v, %v", ok, err)
-	}
-	// No session row yet: AddTurn creates it.
-	if err := s.AddTurn(ctx, "s1", "p1", "other", "How are you?", 1); err != nil {
+	if err := s.AddTurn(ctx, "s1", "p1", "other", 1); err != nil {
 		t.Fatal(err)
 	}
-	if v := text("other"); v.Valid {
-		t.Fatalf("turn text stored without store_chat consent: %q", v.String)
-	}
-
-	// A voice_clone consent is not store_chat.
-	if _, err := s.CreateConsent(ctx, "p1", ConsentVoiceClone, "Pat", "voice.consentCheck"); err != nil {
-		t.Fatal(err)
-	}
-	if ok, _ := s.HasConsent(ctx, "p1", ConsentStoreChat); ok {
-		t.Fatal("voice_clone consent counted as store_chat")
-	}
-	id, err := s.CreateConsent(ctx, "p1", ConsentStoreChat, "", "")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if ok, _ := s.HasConsent(ctx, "p1", ConsentStoreChat); !ok {
-		t.Fatal("HasConsent = false after store_chat consent")
-	}
-	if err := s.AddTurn(ctx, "s1", "p1", "user", "Fine, thanks", 2); err != nil {
-		t.Fatal(err)
-	}
-	if v := text("user"); v.String != "Fine, thanks" {
-		t.Fatalf("turn text with consent = %+v", v)
-	}
-
-	// Revoked: text goes back to NULL.
-	if _, err := s.DB.Exec(`UPDATE consent SET revoked_at = 3 WHERE id = ?`, id); err != nil {
-		t.Fatal(err)
-	}
-	if err := s.AddTurn(ctx, "s1", "p1", "other", "Good to hear", 4); err != nil {
-		t.Fatal(err)
-	}
-	if v := text("other"); v.Valid {
-		t.Fatalf("turn text stored after store_chat was revoked: %q", v.String)
+	var started int64
+	if err := s.DB.QueryRow(`SELECT started_at FROM session WHERE id = 's1'`).Scan(&started); err != nil || started != 1 {
+		t.Fatalf("session started_at = %d, err %v", started, err)
 	}
 }
 

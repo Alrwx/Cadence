@@ -80,13 +80,13 @@ Read this before working on `services/gateway`, `packages/protocol`, or the root
   - `select_to_play`: selection → `audio.play` sent; detail `<source>:cached` or `<source>:synthesized` (the cache-hit flag)
   - `selection`: a count (no value); detail is the source
   - Read them with `GET /api/metrics/summary[?since=<unix ms>]`: count, p50, p95 and max per name (detail `*`) and per (name, detail).
-- [x] **`session` / `turn` rows.** A `session` row is created (or reopened) on connect and gets `ended_at` when its last socket closes (`hub.DisconnectHandler`). A `turn` row is written for each final that starts a turn (`other`) and each reply sent to the phone (`user`). `store.AddTurn` checks `store_chat` consent itself, at write time, so `turn.text` is NULL without it.
+- [x] **`session` / `turn` rows.** A `session` row is created (or reopened) on connect and gets `ended_at` when its last socket closes (`hub.DisconnectHandler`). A `turn` row is written for each final that starts a turn (`other`) and each reply sent to the phone (`user`). `turn.text` is always NULL, even with `store_chat` (see `docs/decisions.md`, 2026-10-25).
 - [ ] **Error routing.** `sendError` always targets the headset. That's fine for phrase and suggestion errors; voice-upload errors are HTTP responses, so they don't go through it.
 - [ ] **Hotspot rehearsal 3× and a backup video (M4).** Both need the demo Mac.
 
 ### P2: stretch (M5)
-- [ ] Saved conversations: `conversation.save/attach/delete` (schemas exist), `/summarize`, and attached summaries passed to `/suggest`. Needs `store_chat`. Store only the label and summary, never the transcript.
-- [ ] Quick memories: a rolling 60 s transcript in memory, then `memory.save` → `/summarize` → passed to `/suggest`. No protocol schema yet.
+- [x] Saved conversations: `conversation.save/attach/delete` (schemas exist), `/summarize`, and attached summaries passed to `/suggest`. Needs `store_chat`. Store only the label and summary, never the transcript.
+- [x] Quick memories: a rolling 60 s transcript in memory, then `memory.save` → `/summarize` → passed to `/suggest`, plus `consent.set` / `consent` for `store_chat`.
 
 ### Cross-team items found while checking
 - **Dev 3:** the model service's `/voices` has `transcript` as a **required** form field (`services/models/app/main.py`). The contract in §6.2 says `transcript?` is optional, and the phone doesn't send a transcript. Either Dev 3 makes it optional (the service then transcribes the sample with STT), or the gateway would have to send a transcript it doesn't have. **Option 1 is the right fix.**

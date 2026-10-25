@@ -17,8 +17,8 @@ const (
 	partialInterval = 400 * time.Millisecond // transcript.partial is rate-limited to this
 	sttRetryAfter   = 5 * time.Second        // wait this long after a failed /stt dial before trying again
 	suggestCount    = 3
-	historySent     = 20 // turns sent to /suggest
-	historyKept     = 50 // turns kept in memory per session
+	historySent     = 20  // turns sent to /suggest
+	historyKept     = 200 // turns kept in memory per session; a saved conversation can be this long
 )
 
 // endTurnLocked cancels the turn's in-flight /suggest and forgets its suggestions. Callers hold ss.mu.
@@ -30,10 +30,16 @@ func (ss *sessionState) endTurnLocked() {
 	ss.suggestions = map[string]string{}
 }
 
+// heardTurn is a turn and when it was said, so "Remember this" can take just the last minute.
+type heardTurn struct {
+	models.Turn
+	At time.Time
+}
+
 func (ss *sessionState) addTurnLocked(speaker, text string) {
-	ss.history = append(ss.history, models.Turn{Speaker: speaker, Text: text})
+	ss.history = append(ss.history, heardTurn{models.Turn{Speaker: speaker, Text: text}, time.Now()})
 	if len(ss.history) > historyKept {
-		ss.history = append([]models.Turn(nil), ss.history[len(ss.history)-historyKept:]...)
+		ss.history = append([]heardTurn(nil), ss.history[len(ss.history)-historyKept:]...)
 	}
 }
 
@@ -138,26 +144,31 @@ func (o *Orchestrator) onFinal(s *hub.Session, ss *sessionState, text string) {
 		return
 	}
 	spec, specOutcome := matchSpeculation(spec, text, history)
-	o.recordTurn(s.ID, "other", text)
+	o.recordTurn(s.ID, "other")
 	s.Broadcast(ctx, protocol.TypeState, turnID, protocol.StateData{State: string(session.Suggesting)})
 	go o.suggest(turnCtx, s, ss, turnID, history, finalAt, spec, specOutcome)
 }
 
-// beginTurn moves LISTENING -> SUGGESTING under a new turn id and records what the other person said.
+// beginTurn records what the other person said and moves LISTENING -> SUGGESTING under a new turn id.
 func (o *Orchestrator) beginTurn(ss *sessionState, text string) (context.Context, string, []models.Turn, bool) {
 	ss.mu.Lock()
 	defer ss.mu.Unlock()
+	// Recorded even when no turn starts (the user is already choosing), so memories and the next turn see it.
+	ss.addTurnLocked("other", text)
 	if _, err := ss.machine.Apply(session.SpeechEnded); err != nil {
 		return nil, "", nil, false
 	}
 	ss.endTurnLocked()
 	ss.turnSeq++
 	ss.turnID = fmt.Sprintf("t_%d", ss.turnSeq)
-	ss.addTurnLocked("other", text)
 	ctx, cancel := context.WithCancel(context.Background())
 	ss.cancelTurn = cancel
 	recent := ss.history[max(0, len(ss.history)-historySent):]
-	return ctx, ss.turnID, append([]models.Turn(nil), recent...), true
+	history := make([]models.Turn, len(recent))
+	for i, t := range recent {
+		history[i] = t.Turn
+	}
+	return ctx, ss.turnID, history, true
 }
 
 // suggest asks the model service for replies and, if the turn is still current, shows them on the headset
@@ -186,9 +197,11 @@ func (o *Orchestrator) suggest(ctx context.Context, s *hub.Session, ss *sessionS
 	}
 	o.record(s.ID, metricSpeculation, -1, specOutcome)
 	if !reused {
+		memories, attached := o.suggestContext(ss, history)
 		start := time.Now()
 		resp, err = o.models.Suggest(ctx, models.SuggestRequest{
-			TurnID: turnID, History: history, Style: models.Style{Phrases: []string{}}, N: suggestCount,
+			TurnID: turnID, History: history, Style: models.Style{Phrases: []string{}},
+			Context: attached, Memories: memories, Locale: o.locale, N: suggestCount,
 		})
 		outcome := suggestOutcome(ctx, err)
 		if err == nil && len(resp.Items) == 0 {

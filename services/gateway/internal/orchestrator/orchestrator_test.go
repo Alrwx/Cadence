@@ -27,11 +27,12 @@ type fakeModels struct {
 	ttsCalls atomic.Int64
 	delay    time.Duration // /tts latency
 
-	suggestDelay time.Duration
-	suggestFail  bool
-	sttDown      bool
-	sttDials     atomic.Int64
-	missingVoice string // /tts answers 404 for this voiceId, as the model service does for an unknown voice
+	suggestDelay   time.Duration
+	suggestFail    bool
+	summarizeDelay time.Duration
+	sttDown        bool
+	sttDials       atomic.Int64
+	missingVoice   string // /tts answers 404 for this voiceId, as the model service does for an unknown voice
 
 	// Speculation tests: sttScript, if set, replaces the canned transcript with the messages sent on it.
 	// suggestDelayFor overrides suggestDelay per request, suggestEcho makes each reply quote the last turn,
@@ -42,6 +43,7 @@ type fakeModels struct {
 	suggestCancelled atomic.Int64
 	mu               sync.Mutex
 	suggestReqs      []models.SuggestRequest
+	summarizeReqs    [][]models.Turn
 	ttsVoices        map[string]int // /tts calls per voiceId
 	deletedVoices    []string       // DELETE /voices/{id} calls
 }
@@ -52,7 +54,16 @@ func (f *fakeModels) ttsCallsFor(voice string) int {
 	return f.ttsVoices[voice]
 }
 
-const fakeUtterance = "How are you feeling today?"
+const (
+	fakeUtterance = "How are you feeling today?"
+	fakeSummary   = "Pat was asked about their health."
+)
+
+func (f *fakeModels) summarizeRequests() [][]models.Turn {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return append([][]models.Turn(nil), f.summarizeReqs...)
+}
 
 func (f *fakeModels) suggestRequests() []models.SuggestRequest {
 	f.mu.Lock()
@@ -112,6 +123,16 @@ func (f *fakeModels) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 		_ = json.NewEncoder(w).Encode(models.SuggestResponse{TurnID: req.TurnID, Ms: 1, Items: items})
+	case "/summarize":
+		var req struct {
+			Turns []models.Turn `json:"turns"`
+		}
+		_ = json.NewDecoder(r.Body).Decode(&req)
+		f.mu.Lock()
+		f.summarizeReqs = append(f.summarizeReqs, req.Turns)
+		f.mu.Unlock()
+		time.Sleep(f.summarizeDelay)
+		_ = json.NewEncoder(w).Encode(map[string]any{"summary": fakeSummary, "ms": 1})
 	case "/stt":
 		f.sttDials.Add(1)
 		if f.sttDown {
@@ -520,7 +541,7 @@ func TestSuggestionPipelineEndToEnd(t *testing.T) {
 	o.session("s1").mu.Lock()
 	defer o.session("s1").mu.Unlock()
 	h := o.session("s1").history
-	if len(h) != 2 || h[1] != (models.Turn{Speaker: "user", Text: pick.Text}) {
+	if len(h) != 2 || h[1].Turn != (models.Turn{Speaker: "user", Text: pick.Text}) {
 		t.Fatalf("history = %+v", h)
 	}
 }

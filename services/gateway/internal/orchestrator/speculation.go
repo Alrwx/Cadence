@@ -114,7 +114,11 @@ func (o *Orchestrator) speculate(s *hub.Session, ss *sessionState, gen int) {
 	ss.mu.Lock()
 	listening := ss.machine.State() == session.Listening
 	nextTurn := fmt.Sprintf("t_%d", ss.turnSeq+1) // the id beginTurn will give this utterance's turn
-	history := append(append([]models.Turn(nil), ss.history...), models.Turn{Speaker: "other", Text: sp.raw})
+	history := make([]models.Turn, 0, len(ss.history)+1)
+	for _, t := range ss.history {
+		history = append(history, t.Turn)
+	}
+	history = append(history, models.Turn{Speaker: "other", Text: sp.raw})
 	ss.mu.Unlock()
 	if !listening {
 		return
@@ -125,9 +129,11 @@ func (o *Orchestrator) speculate(s *hub.Session, ss *sessionState, gen int) {
 	c := &specCall{key: sp.key, history: history, cancel: cancel, done: make(chan struct{})}
 	sp.call = c
 	go func() {
+		memories, attached := o.suggestContext(ss, c.history)
 		start := time.Now()
 		c.resp, c.err = o.models.Suggest(ctx, models.SuggestRequest{
-			TurnID: nextTurn, History: c.history, Style: models.Style{Phrases: []string{}}, N: suggestCount,
+			TurnID: nextTurn, History: c.history, Style: models.Style{Phrases: []string{}},
+			Context: attached, Memories: memories, Locale: o.locale, N: suggestCount,
 		})
 		o.recordSince(s.ID, metricSuggest, start, "spec:"+suggestOutcome(ctx, c.err))
 		close(c.done)
