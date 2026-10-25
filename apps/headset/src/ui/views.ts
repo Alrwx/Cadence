@@ -2,7 +2,7 @@
 import { useEffect } from "react";
 import { create } from "zustand";
 import { useConsent } from "../consent.ts";
-import { send } from "../session.ts";
+import { send, useCadence } from "../session.ts";
 
 export type View =
   | { kind: "main" }
@@ -52,9 +52,13 @@ let consentChecked = false;
 /** Asks for store_chat consent once per page load, as soon as the gateway first reports it off. */
 export function useConsentAtStart(): void {
   const reported = useConsent((s) => s.reported);
+  // A gateway that connects late (a changed hotspot) must not pull the user out of another view or the keyboard.
+  const onMain = useView((s) => s.view.kind === "main");
+  const composing = useCadence((s) => s.state === "COMPOSING");
+  const idle = onMain && !composing;
   useEffect(() => {
-    if (!reported || consentChecked) return;
+    if (!reported || !idle || consentChecked) return;
     consentChecked = true;
     if (!useConsent.getState().storeChat) showView({ kind: "consent", atStart: true });
-  }, [reported]);
+  }, [reported, idle]);
 }

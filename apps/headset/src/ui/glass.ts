@@ -106,7 +106,6 @@ void main() {
   color = mix(color, uLiquid, liquid * 0.6);
   color += meniscus * 0.5 + sheen * 0.1 + fresnel * 0.3 + spec * 0.6 + rim * (0.2 + fresnel * 0.5);
 
-  // Selected, primary and danger buttons get a solid colored ring just inside the edge.
   float ring = (1.0 - smoothstep(RING - aa, RING + aa, -d)) * uRingMix;
   color = mix(color, uRing, ring);
 

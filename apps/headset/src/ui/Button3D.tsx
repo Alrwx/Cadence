@@ -89,7 +89,7 @@ export function Button3D({
     const share = disabled ? 0 : danger ? DANGER_SHARE : variant === "primary" || selected ? ACCENT_SHARE : 0;
     const body = variant === "clear" && !selected ? 0 : solid ? SOLID_OPACITY : GLASS_OPACITY;
     // The colored share is opaque, so it raises the opacity and outweighs the see-through body in the tint.
-    u.uOpacity.value = share + (1 - share) * (disabled ? body * 0.6 : body);
+    u.uOpacity.value = share + (1 - share) * (disabled && !solid ? body * 0.6 : body);
     u.uTint.value.copy(mixSRGB(GLASS_TINT, danger ? DANGER : ACCENT, share && share / u.uOpacity.value));
     u.uRing.value.set(danger ? DANGER_RIM : ACCENT);
     u.uRingMix.value = share ? 1 : 0;
@@ -188,10 +188,14 @@ export function Button3D({
             fillOpacity={disabled ? 0.55 : 1}
             {...TEXT_HALO}
             // A centered icon sits just left of the text, so it needs the laid-out width.
-            onSync={(text: { textRenderInfo?: { blockBounds: [number, number, number, number] } }) => {
-              const bounds = text.textRenderInfo?.blockBounds;
-              if (bounds) setTextWidth(bounds[2] - bounds[0]);
-            }}
+            onSync={
+              icon && !start
+                ? (text: { textRenderInfo?: { blockBounds: [number, number, number, number] } }) => {
+                    const bounds = text.textRenderInfo?.blockBounds;
+                    if (bounds) setTextWidth(bounds[2] - bounds[0]);
+                  }
+                : undefined
+            }
           >
             {label}
           </Text>

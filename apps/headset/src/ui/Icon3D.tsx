@@ -16,9 +16,10 @@ interface Props {
 
 export function Icon3D({ name, size, color = "white", opacity = 1, position }: Props) {
   return (
-    // Like a button's label, the icon must not catch the rays meant for the button under it.
+    // Like a button's label, the icon must not catch the rays meant for the button under it. It writes depth, so
+    // its button's glass, which can sort after it when the head turns, can't draw over the strokes.
     <mesh geometry={iconGeometry(name)} scale={size} position={position} raycast={ignoreRays}>
-      <meshBasicMaterial color={color} opacity={opacity} transparent depthWrite={false} side={DoubleSide} toneMapped={false} />
+      <meshBasicMaterial color={color} opacity={opacity} transparent side={DoubleSide} toneMapped={false} />
     </mesh>
   );
 }

@@ -1,5 +1,6 @@
 // Dev server only, before the app renders.
 import { Vector3 } from "three";
+import { useConsent } from "../consent.ts";
 import { useListener } from "../layout/ListenerAnchor.tsx";
 import { useRecenter } from "../layout/UIAnchor.tsx";
 import { dwellTargets } from "../selection/targets.ts";
@@ -20,6 +21,7 @@ export async function setupDev(): Promise<void> {
       useHeadset,
       useSettings,
       useRecenter,
+      useConsent,
       useListener,
       useView,
       xrStore,

@@ -73,6 +73,8 @@ test("deleting a memory takes a second press", async ({ page }) => {
 test("turning Save memories off takes a second press and deletes every memory", async ({ page }) => {
   await lookAt(page, "More");
   await lookAt(page, "Settings");
+  // On opens right under the menu's Settings row, so it waits for the head to leave before it can fire.
+  await lookAway(page);
   await lookAt(page, "On");
   await expect.poll(() => sentData(page, "consent.set")).toEqual([{ kind: "store_chat", granted: true }]);
   await lookAt(page, "Off");

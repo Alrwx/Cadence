@@ -5,6 +5,7 @@ import type { Page } from "@playwright/test";
 import type { XRStore } from "@react-three/xr";
 import type { XRDevice } from "iwer";
 import { Quaternion, Vector3 } from "three";
+import type { useConsent } from "../src/consent.ts";
 import type { useHeadset } from "../src/session.ts";
 import type { useListener } from "../src/layout/ListenerAnchor.tsx";
 import type { useRecenter } from "../src/layout/UIAnchor.tsx";
@@ -18,6 +19,7 @@ declare global {
       useHeadset: typeof useHeadset;
       useSettings: typeof useSettings;
       useRecenter: typeof useRecenter;
+      useConsent: typeof useConsent;
       useListener: typeof useListener;
       useView: typeof useView;
       xrStore: XRStore;
@@ -41,7 +43,11 @@ export async function enterAR(page: Page, session: string, input: InputMode = "h
   await page.waitForFunction(() => !!window.cadence.xrStore.getState().session);
   await page.waitForFunction(() => window.cadence.useRecenter.getState().at === null);
   if (keepConsentPrompt) return;
-  await page.waitForFunction(() => window.cadence.useView.getState().view.kind === "consent");
+  // A rerun against a still-running mock reuses the session, which may already have consent and so never asks.
+  await page.waitForFunction(() => {
+    const { reported, storeChat } = window.cadence.useConsent.getState();
+    return reported && (storeChat || window.cadence.useView.getState().view.kind === "consent");
+  });
   await page.evaluate(() => window.cadence.useView.setState({ view: { kind: "main" } }));
 }
 
