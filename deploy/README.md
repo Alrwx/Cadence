@@ -72,6 +72,22 @@ deploy/cadence.sh deploy gateway    # changed apps/ or services/gateway only: qu
 
 Then reload the page on the test device. `deploy` waits for the models and finishes by printing `status`.
 
+## Using a real voice as the default
+
+Anyone who hasn't recorded a sample hears the built-in "default" voice, a synthetic clip in `services/models/assets/`. To make it a real person's voice on pserver only, without committing the recording:
+
+1. Record the person reading a short passage, 10–30 s, in a quiet room. Copy the file to pserver.
+2. Convert it. The transcript has to match the recording word for word:
+
+   ```sh
+   cd services/models
+   uv run --extra cuda python scripts/set_default_voice.py ~/clip.m4a --text "Exactly what they said." --out ../../data/default_voice
+   ```
+
+3. Add the two lines it prints (`DEFAULT_VOICE_AUDIO`, `DEFAULT_VOICE_TEXT`) to `.env`, then run `systemctl --user restart cadence-models`.
+
+To go back to the synthetic voice, clear those two lines and restart again. Keep earlier recordings in their own folders under `data/` if you might switch back.
+
 ## Opening it from a test device
 
 `deploy/cadence.sh status` prints the exact URLs. On the tailnet they are:
