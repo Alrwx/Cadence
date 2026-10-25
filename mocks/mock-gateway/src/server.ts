@@ -8,6 +8,8 @@ import {
   isEventType,
   PROTOCOL_VERSION,
   type CadenceEvent,
+  type ConversationsItem,
+  type MemoriesItem,
   type EventDataMap,
   type EventType,
   type PhrasesGroup,
@@ -45,6 +47,11 @@ interface Session {
   turnId: string;
   clipTexts: Map<string, string>;
   groups: PhrasesGroup[];
+  conversations: ConversationsItem[];
+  memories: MemoriesItem[];
+  storeChat: boolean;
+  /** What was said lately, for "Remember this". */
+  heard: { text: string; at: number }[];
   unlocked: boolean;
 }
 
@@ -85,6 +92,17 @@ function getSession(id: string): Session {
         },
         { id: "pg_home", name: "Home", items: [{ id: "ph_love", text: "I love you", audioReady: true }] },
       ],
+      conversations: [
+        {
+          id: "cv_lee",
+          label: "Dr. Lee – last visit",
+          startedAt: Date.now() - 7 * 24 * 3600_000,
+          summary: "Started lisinopril for blood pressure; check back in a week about dizziness.",
+        },
+      ],
+      memories: [{ id: "mem_visit", summary: "The nurse said the doctor visits at 3 pm.", createdAt: Date.now() - 3600_000 }],
+      storeChat: false,
+      heard: [],
       unlocked: false,
     };
     sessions.set(id, s);
@@ -102,11 +120,45 @@ function sendPhrases(s: Session, to: Target): void {
   send(s, to, "phrases", { groups: s.groups });
 }
 
+const MEMORY_WINDOW_MS = 60_000;
+const MEMORY_DELAY_MS = 600;
+const MEMORY_CHARS = 100;
+
+function hear(s: Session, text: string): void {
+  s.heard = s.heard.filter((h) => Date.now() - h.at <= MEMORY_WINDOW_MS);
+  s.heard.push({ text, at: Date.now() });
+}
+
+function sendMemories(s: Session): void {
+  send(s, "headset", "memories", { items: s.memories });
+}
+
+function saveMemory(s: Session, from: Role): void {
+  if (!s.storeChat) {
+    send(s, from, "error", { code: "no_consent", message: "Turn on Save memories in Settings first.", recoverable: true });
+    return;
+  }
+  const recent = s.heard.filter((h) => Date.now() - h.at <= MEMORY_WINDOW_MS).map((h) => h.text);
+  if (!recent.length) {
+    send(s, from, "error", { code: "nothing_heard", message: "Nothing to remember from the last minute.", recoverable: true });
+    return;
+  }
+  const joined = recent.join(" ");
+  const summary = joined.length > MEMORY_CHARS ? `${joined.slice(0, MEMORY_CHARS)}…` : joined;
+  setTimeout(() => {
+    s.memories.unshift({ id: newId("mem"), summary, createdAt: Date.now() });
+    sendMemories(s);
+  }, MEMORY_DELAY_MS);
+}
+
 function runScenario(s: Session): void {
   let at = 0;
   for (const step of scenario.steps) {
     at += step.afterMs;
-    setTimeout(() => send(s, step.to, step.type, step.data), at);
+    setTimeout(() => {
+      if (step.type === "transcript.final") hear(s, (step.data as EventDataMap["transcript.final"]).text);
+      send(s, step.to, step.type, step.data);
+    }, at);
   }
   if (scenario.disconnectAfterMs !== undefined) {
     setTimeout(() => {
@@ -118,6 +170,7 @@ function runScenario(s: Session): void {
 
 function speak(s: Session, text: string, source: EventDataMap["audio.play"]["source"]): void {
   send(s, "all", "state", { state: "SPEAKING" });
+  hear(s, text);
   const clipId = `mock_${++clipCounter}`;
   s.clipTexts.set(clipId, text);
   setTimeout(() => send(s, "phone", "audio.play", { clipId, url: `/clips/${clipId}.wav`, text, source }), scenario.ttsDelayMs);
@@ -187,6 +240,37 @@ function handle(s: Session, from: Role, event: CadenceEvent): void {
     case "phrase.delete":
       for (const g of s.groups) g.items = g.items.filter((p) => p.id !== event.data.phraseId);
       sendPhrases(s, "all");
+      break;
+    case "conversation.save":
+      s.conversations.push({
+        id: newId("cv"),
+        label: event.data.label,
+        startedAt: Date.now(),
+        summary: "(mock summary of this conversation)",
+      });
+      send(s, "headset", "conversations", { items: s.conversations });
+      break;
+    case "conversation.delete":
+      s.conversations = s.conversations.filter((c) => c.id !== event.data.conversationId);
+      send(s, "headset", "conversations", { items: s.conversations });
+      break;
+    case "conversation.attach":
+      console.log("mock: attached conversations", event.data.conversationIds);
+      break;
+    case "memory.save":
+      saveMemory(s, from);
+      break;
+    case "memory.delete":
+      s.memories = s.memories.filter((m) => m.id !== event.data.memoryId);
+      sendMemories(s);
+      break;
+    case "consent.set":
+      s.storeChat = event.data.granted;
+      if (!s.storeChat) {
+        s.memories = [];
+        sendMemories(s);
+      }
+      send(s, "headset", "consent", { storeChat: s.storeChat });
       break;
     case "compose.start":
       send(s, "all", "state", { state: "COMPOSING" });
@@ -305,6 +389,11 @@ wss.on("connection", (ws, req) => {
   console.log(`connected ${role} (session ${sessionId})`);
   send(s, role, "state", { state: "IDLE" });
   sendPhrases(s, role);
+  if (role === "headset") {
+    send(s, "headset", "conversations", { items: s.conversations });
+    send(s, "headset", "consent", { storeChat: s.storeChat });
+    sendMemories(s);
+  }
 
   ws.on("message", (raw, isBinary) => {
     if (isBinary) return; // phone mic frames; the mock ignores audio

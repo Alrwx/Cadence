@@ -24,6 +24,16 @@ Append-only. One entry per decision: date, decision, why, who.
 **Why:** These came out of the earlier glasses design and still fit the Quest 3S version. Head selection covers users who can't pinch; pointing at objects stays blocked until a spike gets camera frames out of Quest Browser.
 **Who:** David
 
+### 2026-10-24 – store_chat consent is set from the headset over the WebSocket
+**Decision:** Added `consent.set { kind: "store_chat", granted }` (headset → gw) and `consent { storeChat }` (gw → headset, on connect and after any change). The headset asks for it the first time "Remember this" is pressed, and Settings can turn it off (which deletes every memory). Voice consent stays on the phone's `POST /api/consent`.
+**Why:** `store_chat` is a setting the headset needs to read back to decide whether to prompt; the voice consent is a one-off signed statement tied to an upload.
+**Who:** David
+
+### 2026-10-24 – Saved phrases: edit before speaking, manage on the phone
+**Decision:** A saved phrase can be spoken as-is or opened in "Type my own" prefilled, edited, and spoken as a typed reply (no new event; it goes out as `compose.submit`). Adding, editing, deleting, and reordering phrases and groups moves from the headset to the phone web app, so the phone also sends the `phrase.*` events and receives `phrases`.
+**Why:** Small edits ("I need some water" → "I need some ice water") shouldn't mean typing from scratch, and managing lists is easier on a touchscreen than in XR.
+**Who:** David
+
 ### 2026-10-24 – Suggestions run in Ollama on both machines
 **Decision:** `/suggest` and `/summarize` call Gemma 4 (`gemma4:e4b`) through a local Ollama on `127.0.0.1:11434`, on the Mac and on the 3080 alike, instead of mlx-lm in-process. Requests use Ollama's JSON-schema `format`, `think: false`, and `keep_alive: -1`.
 **Why:** One code path to test. Ollama runs Gemma 4 on MLX on the Mac and on CUDA on Linux. On the 3080, Gemma 4 can't load in the model service's own process anyway: it needs transformers 5, and qwen-tts pins transformers 4.57.3. Schema-constrained decoding makes parse failures rare. §4 already allowed "MLX or Ollama".
@@ -52,4 +62,3 @@ Append-only. One entry per decision: date, decision, why, who.
 **Decision:** On the 3080, Ollama serves `gemma4:e4b` on the same GPU as the model service, and the CUDA backend sets `PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True` by default.
 **Why:** All three models fit in the 3080's 10 GB with about 250 MB to spare, and `/suggest` takes 389 ms p50, well under the 1.5 s budget (`docs/latency.md`). Without expandable segments, TTS ran out of memory in one of two benchmark runs. The margin is thin: if a batch of 4 or a longer context breaks it, switch Whisper to faster-whisper int8 (an estimated 1 GB less, not yet measured) before moving Gemma to another machine.
 **Who:** PaoloAJ (Dev 3)
-

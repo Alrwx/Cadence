@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "memory.delete",
+  "description": "(Stretch) Delete one quick memory.",
+  "x-direction": "headset → gateway",
+  "type": "object",
+  "properties": {
+    "memoryId": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "memoryId"
+  ],
+  "additionalProperties": false
+}
