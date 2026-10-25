@@ -240,6 +240,7 @@ Every JSON event has this envelope:
 | `conversations` | gw → headset | `{ items: [{ id, label, startedAt, summary? }] }` |
 | `conversation.attach` | headset → gw | `{ conversationIds: [] }` (use as context for this session) |
 | `conversation.delete` | headset → gw | `{ conversationId }` |
+| `conversation.reset` | headset → gw | `{}` (forget this session's transcript, drop pending replies, detach attached conversations; saved conversations and memories stay) |
 
 **Stretch (quick memories):**
 
@@ -327,7 +328,7 @@ Each role lists **scope**, **owned paths**, **done means**, and **notes for your
 - Go gateway: TLS (mkcert certs in dev), serves the built `apps/*` as static files, the `/ws` hub, `/clips/{id}.wav`, and the state machine in §3.
 - Orchestration: forwards phone audio to `WS /stt`, debounces partials, calls `/suggest`, and speculatively calls `/tts` for the top 3; cancels stale work by `turnId`.
 - Clip cache keyed by `(voiceId, locale, text)`: a phrase that comes up again (a repeated suggestion, a saved or instant phrase) is never synthesized twice.
-- SQLite schema and migrations: `person` (with `locale`), `voice_profile` (with `locale`), `consent`, `phrase_clip`, `phrase_group`, `saved_phrase` (with `locale`), `contact`, `session`, `turn` (content only with `store_chat` consent), `audit_log`, `metric`. Stretch: `saved_conversation` (label, session ref, summary), `memory` (summary, created_at).
+- SQLite schema and migrations: `person` (with `locale`), `voice_profile` (with `locale`), `consent`, `phrase_clip`, `phrase_group`, `saved_phrase` (with `locale`), `contact`, `session`, `turn` (speaker and time; text never stored), `audit_log`, `metric`. Stretch: `saved_conversation` (label, session ref, summary), `memory` (summary, created_at).
 - Saved phrases: CRUD over the `phrase.*` events, synthesize a clip via `/tts` on save (and re-synthesize when the voice changes), serve them like instant clips. A new person starts with a "Hospital" group ("I need some water", "I need to use the restroom", "I'm in pain", "Can you call my family?") and a "Demo" group ("Hi judges, I'll be demoing Cadence").
 - Voice upload: accept the phone's sample and forward it to `POST /voices` with the consent ID.
 - *(Stretch)* Saved conversations: on `conversation.save` (only with `store_chat`), send the session's turns to `/summarize` and store **only the label and summary** in `saved_conversation`; the transcript itself is never written to disk for it. Pass attached summaries to `/suggest`; deleting a conversation or revoking `store_chat` deletes all of it.

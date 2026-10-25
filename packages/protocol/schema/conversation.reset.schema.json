@@ -1,0 +1,10 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "conversation.reset",
+  "description": "Start this session's conversation over: forget what was said, drop pending replies, and detach saved conversations.",
+  "x-direction": "headset → gateway",
+  "type": "object",
+  "properties": {},
+  "required": [],
+  "additionalProperties": false
+}

@@ -40,3 +40,25 @@ test("deleting takes a second press", async ({ page }) => {
   await expect.poll(() => sentData(page, "conversation.delete")).toEqual([{ conversationId: "cv_lee" }]);
   await expect.poll(async () => (await labels(page)).includes("Attach")).toBe(false);
 });
+
+test("Main menu in the top bar leads back home", async ({ page }) => {
+  await lookAt(page, "Main menu");
+  await expect.poll(async () => (await labels(page)).includes("Saved phrases")).toBe(true);
+  expect(await labels(page)).not.toContain("Main menu");
+});
+
+test("Reset conversation takes a second press, then detaches what was attached", async ({ page }) => {
+  await lookAt(page, "Attach");
+  await targetCenter(page, "✓ Attached");
+  await lookAt(page, "Main menu");
+  await lookAt(page, "Reset conversation");
+  await targetCenter(page, "Really reset?");
+  await page.waitForTimeout(1200);
+  expect(await sentData(page, "conversation.reset")).toEqual([]);
+  await lookAway(page);
+  await lookAt(page, "Really reset?");
+  await expect.poll(() => sentData(page, "conversation.reset")).toEqual([{}]);
+  await lookAt(page, "Conversations");
+  await targetCenter(page, "Attach");
+  expect(await labels(page)).not.toContain("✓ Attached");
+});

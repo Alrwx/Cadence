@@ -57,14 +57,17 @@ type Orchestrator struct {
 }
 
 type sessionState struct {
-	mu          sync.Mutex
-	hub         *hub.Session // set on connect, so a voice change can refresh this session's phrases
-	machine     *session.Machine
-	turnID      string
-	turnSeq     int
-	suggestions map[string]string // suggestion id -> text, for the current turn
-	history     []models.Turn
-	cancelTurn  context.CancelFunc // cancels the in-flight /suggest for the current turn
+	mu           sync.Mutex
+	hub          *hub.Session // set on connect, so a voice change can refresh this session's phrases
+	machine      *session.Machine
+	turnID       string
+	turnSeq      int
+	suggestions  map[string]string // suggestion id -> text, for the current turn
+	history      []heardTurn
+	attached     []string           // saved conversation ids used as /suggest context (conversation.attach)
+	savedThrough time.Time          // when the last turn of the last saved conversation was said
+	summarizing  bool               // a memory.save or conversation.save is waiting on /summarize
+	cancelTurn   context.CancelFunc // cancels the in-flight /suggest for the current turn
 
 	spec speculator // speculative /suggest on partials; its own lock, taken before mu (speculation.go)
 
@@ -95,6 +98,9 @@ func (o *Orchestrator) OnConnect(s *hub.Session, role hub.Role) {
 	_ = s.Send(ctx, role, protocol.TypeVoice, "", o.voiceStatus())
 	if role == hub.Headset {
 		o.sendPhrases(ctx, s)
+		o.sendConsent(ctx, s)
+		o.sendMemories(ctx, s)
+		o.sendConversations(ctx, s)
 		go o.warmClips()
 	}
 }
@@ -151,6 +157,8 @@ func (o *Orchestrator) OnEvent(s *hub.Session, from hub.Role, env protocol.Envel
 		o.apply(ctx, s, ss, session.ComposeStart)
 	case *protocol.CancelData:
 		o.apply(ctx, s, ss, session.Cancel)
+	case *protocol.ConversationResetData:
+		o.resetConversation(ctx, s, ss)
 	case *protocol.AudioDoneData:
 		o.apply(ctx, s, ss, session.ClipDone)
 	case *protocol.ComposeSubmitData:
@@ -170,6 +178,9 @@ func (o *Orchestrator) OnEvent(s *hub.Session, from hub.Role, env protocol.Envel
 	case *protocol.PhraseSpeakData, *protocol.PhraseSaveData, *protocol.PhraseDeleteData,
 		*protocol.PhraseGroupSaveData, *protocol.PhraseGroupDeleteData:
 		o.onPhraseEvent(ctx, s, ss, d)
+	case *protocol.ConsentSetData, *protocol.MemorySaveData, *protocol.MemoryDeleteData,
+		*protocol.ConversationSaveData, *protocol.ConversationDeleteData, *protocol.ConversationAttachData:
+		o.onMemoryEvent(ctx, s, ss, d)
 	case *protocol.VoiceUseData:
 		o.useVoice(ctx, s, from, d.Voice)
 	case *protocol.ListenerSayData:
@@ -209,7 +220,7 @@ func (o *Orchestrator) speak(ctx context.Context, s *hub.Session, ss *sessionSta
 	ss.addTurnLocked("user", text)
 	turnID := ss.turnID
 	ss.mu.Unlock()
-	o.spoken(s.ID, source, text, selectedAt, tag) // queued before the send, so it's in by the time the phone hears it
+	o.spoken(s.ID, source, selectedAt, tag) // queued before the send, so it's in by the time the phone hears it
 	_ = s.Send(ctx, hub.Phone, protocol.TypeAudioPlay, turnID, protocol.AudioPlayData{
 		ClipID: clipID, URL: "/clips/" + clipID + ".wav", Text: text, Source: source,
 	})
