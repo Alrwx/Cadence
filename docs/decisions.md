@@ -28,3 +28,8 @@ Append-only. One entry per decision: date, decision, why, who.
 **Decision:** Added `consent.set { kind: "store_chat", granted }` (headset → gw) and `consent { storeChat }` (gw → headset, on connect and after any change). The headset asks for it the first time "Remember this" is pressed, and Settings can turn it off (which deletes every memory). Voice consent stays on the phone's `POST /api/consent`.
 **Why:** `store_chat` is a setting the headset needs to read back to decide whether to prompt; the voice consent is a one-off signed statement tied to an upload.
 **Who:** David
+
+### 2026-10-24 – Saved phrases: edit before speaking, manage on the phone
+**Decision:** A saved phrase can be spoken as-is or opened in "Type my own" prefilled, edited, and spoken as a typed reply (no new event; it goes out as `compose.submit`). Adding, editing, deleting, and reordering phrases and groups moves from the headset to the phone web app, so the phone also sends the `phrase.*` events and receives `phrases`.
+**Why:** Small edits ("I need some water" → "I need some ice water") shouldn't mean typing from scratch, and managing lists is easier on a touchscreen than in XR.
+**Who:** David

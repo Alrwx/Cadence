@@ -27,13 +27,14 @@ Some users can't pinch reliably (one-sided weakness after a stroke, tremor, limi
 Users can **bookmark phrases** they say often, grouped by context, so they're one pinch away without waiting for suggestions. Example: a patient in a hospital keeps a "Hospital" group with "I need some water", "I need to use the restroom", "I'm in pain", "Can you call my family?" and uses it when the nurse comes in.
 - Phrases can be added by typing, or by bookmarking a suggestion or typed reply right after it's spoken.
 - Each saved phrase is **pre-synthesized in the user's voice when it's saved**, so it plays as fast as the instant tier.
-- Groups (e.g. "Hospital", "Home", "Doctor") can be reordered, renamed, and deleted; phrases can be edited or removed.
+- A saved phrase can be **spoken as-is** in one action, or **edited before speaking**: it opens in "Type my own" with its text filled in, and the edited text is spoken like a typed reply (synthesized on submit; the saved phrase itself is unchanged).
+- Groups (e.g. "Hospital", "Home", "Doctor") can be reordered, renamed, and deleted; phrases can be edited or removed. This management happens on the **phone web app**; the headset panel is for speaking, editing before speaking, and bookmarking.
 - Saved phrases are user-authored, not conversation content, so they don't need `store_chat` consent. They are still local-only.
 
 ### Saved conversations (stretch goal)
 Users can **save a conversation** (e.g. a doctor's appointment) and reference it in later conversations, so the next visit's suggestions know what was discussed ("Did the new medication help?" → a reply that remembers which medication).
 - **Opt-in per conversation:** requires `store_chat` consent *and* an explicit "Save this conversation" action with a label (e.g. "Dr. Lee – Oct 24"). Nothing is saved by default.
-- Saved conversations are browsable (transcript + optional short summary) and **deletable at any time**; deletion removes transcript, summary, and any derived context.
+- **Only the AI summary is stored**, never the transcript. Saved conversations are browsable by label and summary and **deletable at any time**; deletion removes the summary and any derived context.
 - At the start of a conversation the user can attach one or more saved conversations as context; the gateway passes a summary of them to `/suggest`.
 - Local-only like everything else; never sent to a remote API.
 
@@ -220,12 +221,12 @@ Every JSON event has this envelope:
 | `compose.start` | headset → gw | `{}` |
 | `compose.submit` | headset → gw | `{ text }` |
 | `cancel` | headset → gw | `{}` (back out of choosing/composing) |
-| `phrases` | gw → headset | `{ groups: [{ id, name, items: [{ id, text, icon?, audioReady: bool }] }] }` (sent on connect and after any change) |
+| `phrases` | gw → headset, phone | `{ groups: [{ id, name, items: [{ id, text, icon?, audioReady: bool }] }] }` (sent on connect and after any change) |
 | `phrase.speak` | headset → gw | `{ phraseId }` |
-| `phrase.save` | headset → gw | `{ text, groupId, fromClipId? }` (`fromClipId` bookmarks a reply that was just spoken) |
-| `phrase.delete` | headset → gw | `{ phraseId }` |
-| `phrase.group.save` | headset → gw | `{ groupId?, name, order? }` (create or rename) |
-| `phrase.group.delete` | headset → gw | `{ groupId }` |
+| `phrase.save` | headset/phone → gw | `{ text, groupId, fromClipId? }` (`fromClipId` bookmarks a reply that was just spoken) |
+| `phrase.delete` | headset/phone → gw | `{ phraseId }` |
+| `phrase.group.save` | headset/phone → gw | `{ groupId?, name, order? }` (create or rename) |
+| `phrase.group.delete` | headset/phone → gw | `{ groupId }` |
 | `audio.play` | gw → phone | `{ clipId, url: "/clips/<id>.wav", text, source: "suggestion"\|"instant"\|"saved"\|"typed" }` |
 | `audio.done` | phone → gw | `{ clipId }` |
 | `phone.unlock` | phone → gw | `{}` (user tapped "Start"; audio autoplay is now allowed) |
@@ -285,12 +286,12 @@ Each role lists **scope**, **owned paths**, **done means**, and **notes for your
 - Accessibility: large targets, a hold-to-confirm or debounce option, a snap-to-nearest assist, one-handed use, UI at chest/lap height to reduce arm fatigue, icon next to each reply.
 - Hands-free selection (§1): center reticle from the viewer pose, dwell-to-select with a filling ring, input-mode setting (hands / head / both).
 - "Type my own": a large word board or keyboard in XR.
-- Saved-phrases panel: one action to open, tabs per group, big phrase buttons; a "bookmark" button on the last spoken reply; add/edit/delete phrases and groups.
+- Saved-phrases panel: one action to open, tabs per group, big phrase buttons, each with an "edit, then speak" action that opens "Type my own" prefilled; a "bookmark" button on the last spoken reply. Adding, editing, and deleting phrases and groups lives on the phone (Dev 2).
 - UI strings from `apps/shared/locales/`, never inline.
 - *(Stretch)* Saved conversations: a "Save this conversation" action with a label, a list of saved conversations, and a picker to attach them as context.
 - *(Stretch)* Quick memories: a "Remember this" action and a memories panel with delete.
 
-**Done means:** against `mocks/mock-gateway`, a user can enter AR, see 3 replies, select one by pinch and by head dwell, fire each instant gesture, speak and bookmark a saved phrase, and compose a typed reply, with no console errors on Quest Browser.
+**Done means:** against `mocks/mock-gateway`, a user can enter AR, see 3 replies, select one by pinch and by head dwell, fire each instant gesture, speak, edit-then-speak, and bookmark a saved phrase, and compose a typed reply, with no console errors on Quest Browser.
 **Agent notes:** test on desktop first with Meta's Immersive Web Emulator (it doesn't emulate passthrough or, likely, hand gestures). Keep gesture thresholds in one config file. Keep draw calls low; profile on the device weekly.
 
 ### Dev 2 — Phone experience + shared client (`apps/phone`, `apps/shared`, `mocks/mock-gateway`)
@@ -299,6 +300,7 @@ Each role lists **scope**, **owned paths**, **done means**, and **notes for your
 - Mic capture via `getUserMedia` + an AudioWorklet that downsamples to PCM16 16 kHz and sends 20 ms binary frames.
 - Plays `audio.play` clips through Web Audio, then sends `audio.done`.
 - Live captions of what the listener said, and the large "I'm answering" ring during `CHOOSING`/`COMPOSING`.
+- Saved-phrase management: add, edit, delete, and reorder phrases and groups over the `phrase.*` events.
 - Voice setup: after the consent step, record a ~30-second sample with `MediaRecorder` (audio, or video with audio) or pick an existing file, and upload it to the gateway.
 - `apps/shared`: WebSocket client with reconnect + backoff, typed event parsing from `packages/protocol`, Zustand store shared by both apps, and the locale-keyed UI string files (`locales/en.json`).
 - `mocks/mock-gateway`: a tiny server that replays scripted event sequences (`happy-path`, `slow-tts`, `disconnect`) so Dev 1 never waits on the backend.
@@ -328,7 +330,7 @@ Each role lists **scope**, **owned paths**, **done means**, and **notes for your
 - SQLite schema and migrations: `person` (with `locale`), `voice_profile` (with `locale`), `consent`, `phrase_clip`, `phrase_group`, `saved_phrase` (with `locale`), `contact`, `session`, `turn` (content only with `store_chat` consent), `audit_log`, `metric`. Stretch: `saved_conversation` (label, session ref, summary), `memory` (summary, created_at).
 - Saved phrases: CRUD over the `phrase.*` events, synthesize a clip via `/tts` on save (and re-synthesize when the voice changes), serve them like instant clips. A new person starts with a "Hospital" group ("I need some water", "I need to use the restroom", "I'm in pain", "Can you call my family?") and a "Demo" group ("Hi judges, I'll be demoing Cadence").
 - Voice upload: accept the phone's sample and forward it to `POST /voices` with the consent ID.
-- *(Stretch)* Saved conversations: persist the session's turns on `conversation.save` (only with `store_chat`), call `/summarize`, pass attached summaries to `/suggest`; deleting a conversation or revoking `store_chat` deletes all of it.
+- *(Stretch)* Saved conversations: on `conversation.save` (only with `store_chat`), send the session's turns to `/summarize` and store **only the label and summary** in `saved_conversation`; the transcript itself is never written to disk for it. Pass attached summaries to `/suggest`; deleting a conversation or revoking `store_chat` deletes all of it.
 - *(Stretch)* Quick memories: keep a rolling ~60 s transcript in memory, summarize it on `memory.save` (only with `store_chat`), pass memories to `/suggest` by keyword (at most 5 that share a content word with the last 3 turns, best match first, ties to the newer; none if nothing matches); revoking `store_chat` deletes them all.
 - Consent flow endpoints and revoke-deletes-everything behavior.
 - `packages/protocol`: schemas, generation scripts (TS + Go), examples, and contract tests.

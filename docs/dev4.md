@@ -80,7 +80,7 @@ Read this before working on `services/gateway`, `packages/protocol`, or the root
 - [ ] **Hotspot rehearsal 3× and a backup video (M4).** Both need the demo Mac.
 
 ### P2: stretch (M5)
-- [ ] Saved conversations: `conversation.save/attach/delete` (schemas exist), `/summarize`, and attached summaries passed to `/suggest`. Needs `store_chat`.
+- [ ] Saved conversations: `conversation.save/attach/delete` (schemas exist), `/summarize`, and attached summaries passed to `/suggest`. Needs `store_chat`. Store only the label and summary, never the transcript.
 - [ ] Quick memories: a rolling 60 s transcript in memory, then `memory.save` → `/summarize` → passed to `/suggest`. No protocol schema yet.
 
 ### Cross-team items found while checking
