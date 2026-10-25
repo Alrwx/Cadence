@@ -16,6 +16,7 @@ import {
 import { t } from "@cadence/shared/i18n";
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { useStore } from "zustand";
+import { Icon, type IconName } from "./ui.tsx";
 
 interface Props {
   store: CadenceStore;
@@ -61,22 +62,27 @@ export function PhraseManager({ store, connection, onClose }: Props) {
 
   return (
     <div className="phrases">
-      <div className="phrases-head">
+      <nav className="nav">
+        <button className="btn btn-text back" onClick={onClose}>
+          <Icon name="back" />
+          {t("phrases.back")}
+        </button>
+      </nav>
+      <div>
         <h1>{t("phrases.title")}</h1>
-        <button onClick={onClose}>{t("phrases.back")}</button>
+        <p className="subtitle">{t("phrases.intro")}</p>
       </div>
-      <p className="muted">{t("phrases.intro")}</p>
-      {!online && <p className="error">{t("phrases.offline")}</p>}
+      {!online && <p className="notice">{t("phrases.offline")}</p>}
       {gatewayError && (
-        <p className="error" role="alert">
+        <p className="notice" role="alert">
           {t("phrases.gatewayError", { message: gatewayError })}
         </p>
       )}
 
       {!loaded && groups.length === 0 ? (
-        <p className="muted">{t("phrases.loading")}</p>
+        <p className="muted status-text">{t("phrases.loading")}</p>
       ) : groups.length === 0 ? (
-        <p className="muted">{t("phrases.empty")}</p>
+        <p className="muted status-text">{t("phrases.empty")}</p>
       ) : (
         groups.map((group) => <GroupCard key={group.id} group={group} groups={groups} online={online} send={send} />)
       )}
@@ -104,7 +110,7 @@ function GroupCard({
   const down = movedGroupOrder(groups, group.id, 1);
 
   return (
-    <section className="group" aria-label={group.name}>
+    <section className="card group" aria-label={group.name}>
       {mode === "rename" ? (
         <TextForm
           label={t("phrases.renameLabel")}
@@ -122,66 +128,73 @@ function GroupCard({
         />
       ) : (
         <div className="group-head">
-          <h2>{group.name}</h2>
-          <span className="muted">{phraseCount(group.items.length)}</span>
+          <div className="group-title">
+            <h2>{group.name}</h2>
+            <span className="muted small">{phraseCount(group.items.length)}</span>
+          </div>
+          {mode === "view" && (
+            <div className="tools">
+              <button
+                className="icon-btn"
+                disabled={!online}
+                onClick={() => setMode("rename")}
+                aria-label={`${t("phrases.rename")}: ${group.name}`}
+              >
+                <Icon name="edit" />
+              </button>
+              <button
+                className="icon-btn"
+                disabled={!online || up === null}
+                onClick={() =>
+                  up !== null && send("phrase.group.save", { groupId: group.id, name: group.name, order: up })
+                }
+                aria-label={`${t("phrases.moveUp")}: ${group.name}`}
+              >
+                <Icon name="up" />
+              </button>
+              <button
+                className="icon-btn"
+                disabled={!online || down === null}
+                onClick={() =>
+                  down !== null && send("phrase.group.save", { groupId: group.id, name: group.name, order: down })
+                }
+                aria-label={`${t("phrases.moveDown")}: ${group.name}`}
+              >
+                <Icon name="down" />
+              </button>
+              <button
+                className="icon-btn danger"
+                disabled={!online}
+                onClick={() => setMode("confirmDelete")}
+                aria-label={`${t("phrases.delete")}: ${group.name}`}
+              >
+                <Icon name="trash" />
+              </button>
+            </div>
+          )}
         </div>
       )}
 
-      {mode === "confirmDelete" ? (
+      {mode === "confirmDelete" && (
         <div className="confirm">
           <p>
             {group.items.length === 0
               ? t("phrases.confirmDeleteEmptyGroup", { name: group.name })
               : t("phrases.confirmDeleteGroup", { name: group.name, phrases: phraseCount(group.items.length) })}
           </p>
-          <div className="row">
+          <div className="actions">
             <button
-              className="danger"
+              className="btn btn-small btn-danger"
               disabled={!online}
               onClick={() => send("phrase.group.delete", { groupId: group.id })}
             >
               {t("phrases.yesDelete")}
             </button>
-            <button onClick={() => setMode("view")}>{t("phrases.cancel")}</button>
+            <button className="btn btn-small btn-text" onClick={() => setMode("view")}>
+              {t("phrases.cancel")}
+            </button>
           </div>
         </div>
-      ) : (
-        mode === "view" && (
-          <div className="row tools">
-            <button
-              disabled={!online}
-              onClick={() => setMode("rename")}
-              aria-label={`${t("phrases.rename")}: ${group.name}`}
-            >
-              {t("phrases.rename")}
-            </button>
-            <button
-              disabled={!online || up === null}
-              onClick={() =>
-                up !== null && send("phrase.group.save", { groupId: group.id, name: group.name, order: up })
-              }
-              aria-label={`${t("phrases.moveUp")}: ${group.name}`}
-            >
-              ↑
-            </button>
-            <button
-              disabled={!online || down === null}
-              onClick={() =>
-                down !== null && send("phrase.group.save", { groupId: group.id, name: group.name, order: down })
-              }
-              aria-label={`${t("phrases.moveDown")}: ${group.name}`}
-            >
-              ↓
-            </button>
-            <button
-              disabled={!online}
-              onClick={() => setMode("confirmDelete")}
-              aria-label={`${t("phrases.delete")}: ${group.name}`}
-            >
-              {t("phrases.delete")}
-            </button>
-          </div>
-        )
       )}
 
       <ul className="phrase-list">
@@ -197,6 +210,7 @@ function GroupCard({
         problem={(text) => phraseProblem(text, group)}
         kind="phrase"
         submitLabel={t("phrases.add")}
+        icon="plus"
         disabled={!online}
         clearOnSubmit
         onSubmit={(text) => send("phrase.save", { text, groupId: group.id })}
@@ -246,37 +260,43 @@ function PhraseRow({
   }
   return (
     <li className="phrase">
-      <span className="phrase-text">{phrase.text}</span>
-      {!phrase.audioReady && <span className="muted small">{t("phrases.preparing")}</span>}
+      <div className="phrase-main">
+        <span className="phrase-text">{phrase.text}</span>
+        {!phrase.audioReady && <span className="muted small">{t("phrases.preparing")}</span>}
+      </div>
       {mode === "confirmDelete" ? (
         <div className="confirm">
           <p>{t("phrases.confirmDeletePhrase", { text: phrase.text })}</p>
-          <div className="row">
+          <div className="actions">
             <button
-              className="danger"
+              className="btn btn-small btn-danger"
               disabled={!online}
               onClick={() => send("phrase.delete", { phraseId: phrase.id })}
             >
               {t("phrases.yesDelete")}
             </button>
-            <button onClick={() => setMode("view")}>{t("phrases.cancel")}</button>
+            <button className="btn btn-small btn-text" onClick={() => setMode("view")}>
+              {t("phrases.cancel")}
+            </button>
           </div>
         </div>
       ) : (
-        <div className="row tools">
+        <div className="tools">
           <button
+            className="icon-btn"
             disabled={!online}
             onClick={() => setMode("edit")}
             aria-label={`${t("phrases.edit")}: ${phrase.text}`}
           >
-            {t("phrases.edit")}
+            <Icon name="edit" />
           </button>
           <button
+            className="icon-btn danger"
             disabled={!online}
             onClick={() => setMode("confirmDelete")}
             aria-label={`${t("phrases.delete")}: ${phrase.text}`}
           >
-            {t("phrases.delete")}
+            <Icon name="trash" />
           </button>
         </div>
       )}
@@ -286,7 +306,7 @@ function PhraseRow({
 
 function NewGroup({ groups, online, send }: { groups: PhrasesGroup[]; online: boolean; send: Send }) {
   return (
-    <section className="group new-group">
+    <section className="card new-group">
       <TextForm
         label={t("phrases.newGroup")}
         placeholder={t("phrases.newGroupPlaceholder")}
@@ -294,6 +314,7 @@ function NewGroup({ groups, online, send }: { groups: PhrasesGroup[]; online: bo
         problem={(name) => groupNameProblem(name, groups)}
         kind="group"
         submitLabel={t("phrases.addGroup")}
+        icon="plus"
         disabled={!online}
         clearOnSubmit
         onSubmit={(name) => send("phrase.group.save", { name })}
@@ -310,6 +331,8 @@ interface TextFormProps {
   kind: "phrase" | "group";
   problem: (text: string) => TextProblem | null;
   submitLabel: string;
+  /** Shows the submit button as a round icon instead of text. */
+  icon?: IconName;
   disabled: boolean;
   hint?: string;
   clearOnSubmit?: boolean;
@@ -338,9 +361,10 @@ function TextForm(p: TextFormProps) {
 
   return (
     <form className="text-form" onSubmit={submit}>
-      <label className="field">
-        {p.label}
+      <div className="text-row">
         <input
+          className="input"
+          aria-label={p.label}
           value={text}
           placeholder={p.placeholder}
           // A little room over the limit so the "too long" message can show instead of silently cutting text.
@@ -352,19 +376,22 @@ function TextForm(p: TextFormProps) {
           aria-invalid={shown ? true : undefined}
           autoFocus={p.initial !== undefined}
         />
-      </label>
-      {shown && <p className="error small">{shown}</p>}
-      {p.hint && <p className="muted small">{p.hint}</p>}
-      <div className="row">
-        <button type="submit" className="primary" disabled={p.disabled}>
-          {p.submitLabel}
+        <button
+          type="submit"
+          className={p.icon ? "icon-btn fill" : "btn btn-small btn-primary"}
+          aria-label={p.submitLabel}
+          disabled={p.disabled}
+        >
+          {p.icon ? <Icon name={p.icon} /> : p.submitLabel}
         </button>
         {p.onCancel && (
-          <button type="button" onClick={p.onCancel}>
+          <button type="button" className="btn btn-small btn-text" onClick={p.onCancel}>
             {t("phrases.cancel")}
           </button>
         )}
       </div>
+      {shown && <p className="error-text small">{shown}</p>}
+      {p.hint && <p className="muted small">{p.hint}</p>}
     </form>
   );
 }

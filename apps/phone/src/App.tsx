@@ -1,11 +1,19 @@
 import type { AudioPlayData } from "@cadence/protocol";
-import { createCadenceStore, GatewayConnection, sessionIdFromUrl, type CadenceState } from "@cadence/shared";
+import {
+  createCadenceStore,
+  GatewayConnection,
+  sessionIdFromUrl,
+  type CadenceState,
+  type ConnectionStatus,
+} from "@cadence/shared";
 import { t } from "@cadence/shared/i18n";
 import { useEffect, useState } from "react";
 import { useStore } from "zustand";
 import { createStore } from "zustand/vanilla";
 import { PhoneAudio } from "./audio.ts";
 import { PhraseManager } from "./PhraseManager.tsx";
+import { setTheme, useTheme } from "./theme.ts";
+import { Icon, Sheet } from "./ui.tsx";
 import { VoiceSetup } from "./VoiceSetup.tsx";
 import { keepScreenOn } from "./wakeLock.ts";
 
@@ -92,27 +100,107 @@ export function App() {
   };
 
   // Voice setup lives before Start, so the sample isn't also streamed to speech-to-text.
-  if (settingUpVoice) return <VoiceSetup onClose={() => setSettingUpVoice(false)} />;
-  if (managingPhrases) {
-    return <PhraseManager store={store} connection={connection} onClose={() => setManagingPhrases(false)} />;
-  }
-  if (!started) {
-    return (
-      <div className="start">
-        <button className="big" onClick={start}>
+  const covered = settingUpVoice || managingPhrases;
+  return (
+    <>
+      {started ? (
+        <Main micError={micError} />
+      ) : (
+        <Start
+          inert={covered}
+          onStart={start}
+          onSetupVoice={() => setSettingUpVoice(true)}
+          onPhrases={() => setManagingPhrases(true)}
+        />
+      )}
+      {settingUpVoice && (
+        <Sheet label={t("voice.title")} onClosed={() => setSettingUpVoice(false)}>
+          {(close) => <VoiceSetup onClose={close} />}
+        </Sheet>
+      )}
+      {managingPhrases && (
+        <Sheet label={t("phrases.title")} variant="push" onClosed={() => setManagingPhrases(false)}>
+          {(close) => <PhraseManager store={store} connection={connection} onClose={close} />}
+        </Sheet>
+      )}
+    </>
+  );
+}
+
+/** The connection status on the left, the light and dark switch on the right. */
+function TopBar({ status }: { status: ConnectionStatus }) {
+  const theme = useTheme();
+  const next = theme === "dark" ? "light" : "dark";
+  return (
+    <div className="topbar">
+      <span className={`pill ${status}`} role="status">
+        {t(`status.${status}`)}
+      </span>
+      <button
+        className="icon-btn theme-toggle"
+        onClick={() => setTheme(next)}
+        aria-label={t(next === "dark" ? "theme.toDark" : "theme.toLight")}
+      >
+        <Icon name={theme === "dark" ? "sun" : "moon"} />
+      </button>
+    </div>
+  );
+}
+
+function Start({
+  inert,
+  onStart,
+  onSetupVoice,
+  onPhrases,
+}: {
+  inert: boolean;
+  onStart: () => void;
+  onSetupVoice: () => void;
+  onPhrases: () => void;
+}) {
+  const status = useCadence((s) => s.connection);
+  return (
+    <main className="start" inert={inert}>
+      <TopBar status={status} />
+      <header className="brand">
+        <div className="mark" aria-hidden="true">
+          <i />
+          <i />
+          <i />
+          <i />
+          <i />
+        </div>
+        <h1>Cadence</h1>
+        <p className="subtitle">{t("phone.tagline")}</p>
+      </header>
+      <div className="start-action">
+        <button className="btn btn-primary btn-large" onClick={onStart}>
           {t("phone.start")}
         </button>
         <p className="hint">{t("phone.startHint")}</p>
-        <button className="secondary" onClick={() => setSettingUpVoice(true)}>
-          {t("phone.setupVoice")}
-        </button>
-        <button className="secondary" onClick={() => setManagingPhrases(true)}>
-          {t("phone.managePhrases")}
-        </button>
       </div>
-    );
-  }
-  return <Main micError={micError} />;
+      <nav className="list">
+        <button className="list-row" onClick={onSetupVoice}>
+          <span className="list-icon">
+            <Icon name="mic" size={18} />
+          </span>
+          {t("phone.setupVoice")}
+          <span className="chevron">
+            <Icon name="chevron" />
+          </span>
+        </button>
+        <button className="list-row" onClick={onPhrases}>
+          <span className="list-icon">
+            <Icon name="message" size={18} />
+          </span>
+          {t("phone.managePhrases")}
+          <span className="chevron">
+            <Icon name="chevron" />
+          </span>
+        </button>
+      </nav>
+    </main>
+  );
 }
 
 function Main({ micError }: { micError: string | null }) {
@@ -123,22 +211,50 @@ function Main({ micError }: { micError: string | null }) {
   const playing = useStore(playback, (s) => s.playing);
   const playError = useStore(playback, (s) => s.error);
 
+  const recent = captions.slice(-4);
   const answering = state === "CHOOSING" || state === "COMPOSING";
+  // The dock shows what the other person needs to know: the reply being spoken, that one is coming, or that we're listening.
+  const mode = playing ? "speaking" : answering ? "answering" : "listening";
   return (
-    <div className="main">
-      <div className={`status ${status}`}>
-        {t(`status.${status}`)}
-        {micError && <div className="error">{t("phone.micError", { error: micError })}</div>}
-        {playError && <div className="error">{t("phone.playError", { error: playError })}</div>}
-      </div>
-      {answering && <div className="ring">{t("phone.answering")}</div>}
-      {playing && <div className="speaking">“{playing.text}”</div>}
-      <div className="captions">
-        {captions.slice(-4).map((c, i) => (
-          <div key={i}>{c}</div>
+    <main className="listening">
+      <TopBar status={status} />
+      {micError && (
+        <p className="notice" role="alert">
+          {t("phone.micError", { error: micError })}
+        </p>
+      )}
+      {playError && (
+        <p className="notice" role="alert">
+          {t("phone.playError", { error: playError })}
+        </p>
+      )}
+      <section className="captions" aria-live="polite">
+        {recent.length === 0 && !partial && <p className="placeholder">{t("phone.captionsPlaceholder")}</p>}
+        {recent.map((line, i) => (
+          <p key={captions.length - recent.length + i}>{line}</p>
         ))}
-        {partial && <div className="partial">{partial}</div>}
+        {partial && <p className="partial">{partial}</p>}
+      </section>
+      <div key={mode} className={`dock ${mode}`}>
+        {mode === "speaking" && <p>“{playing?.text}”</p>}
+        {mode === "answering" && (
+          <>
+            <span className="orb" aria-hidden="true" />
+            <p>{t("phone.answering")}</p>
+          </>
+        )}
+        {mode === "listening" && (
+          <>
+            <span className="bars" aria-hidden="true">
+              <i />
+              <i />
+              <i />
+              <i />
+            </span>
+            <p>{t("phone.listening")}</p>
+          </>
+        )}
       </div>
-    </div>
+    </main>
   );
 }
