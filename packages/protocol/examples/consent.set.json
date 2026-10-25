@@ -1,0 +1,11 @@
+{
+  "type": "consent.set",
+  "v": 1,
+  "sessionId": "s_123",
+  "turnId": "t_7",
+  "ts": 1729740007250,
+  "data": {
+    "kind": "store_chat",
+    "granted": true
+  }
+}

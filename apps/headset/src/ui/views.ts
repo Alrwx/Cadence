@@ -2,7 +2,12 @@
 import { create } from "zustand";
 import { send } from "../session.ts";
 
-export type View = { kind: "main" } | { kind: "saved" } | { kind: "conversations" } | { kind: "settings" };
+export type View =
+  | { kind: "main" }
+  | { kind: "saved" }
+  | { kind: "conversations"; tab?: "memories" }
+  | { kind: "consent" }
+  | { kind: "settings" };
 
 export interface Notice {
   text: string;
@@ -28,7 +33,7 @@ export function startCompose(draft = ""): void {
   send("compose.start", {});
 }
 
-const NOTICE_MS = 3000;
+export const NOTICE_MS = 3000;
 
 /** Shows a short message in the status line. */
 export function notify(text: string, tone: Notice["tone"] = "info"): void {

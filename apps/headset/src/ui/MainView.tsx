@@ -1,13 +1,17 @@
 // Suggested replies, instant phrases, "Type my own", and the way into saved phrases.
 import { Text } from "@react-three/drei";
+import { useEffect } from "react";
 import type { SuggestionsItem } from "@cadence/protocol";
 import { gesturePhrases, layout } from "../config.ts";
+import { useConsent } from "../consent.ts";
 import type { Gesture } from "../gestures/classify.ts";
 import { fireGesture } from "../gestures/HandGestures.tsx";
+import { useMemories } from "../memories.ts";
 import { rememberSpeech, send, useCadence, useHeadset } from "../session.ts";
 import { t } from "../strings.ts";
 import { Button3D } from "./Button3D.tsx";
-import { notify, showView, startCompose, useView } from "./views.ts";
+import { remember } from "./ConsentView.tsx";
+import { notify, NOTICE_MS, showView, startCompose, useView } from "./views.ts";
 
 const REPLY_Y = 0.12;
 const REPLY_HEIGHT = layout.buttonHeight * 1.4;
@@ -20,8 +24,9 @@ export function MainView() {
       <Replies />
       <InstantRow />
       <group position={[0, SAVED_Y, 0]}>
-        <Button3D label={t("main.savedPhrases")} width={0.3} color="#8a6a2a" position={[-0.17, 0, 0]} onPress={() => showView({ kind: "saved" })} />
+        <Button3D label={t("main.savedPhrases")} width={0.24} color="#8a6a2a" position={[-0.25, 0, 0]} onPress={() => showView({ kind: "saved" })} />
         <BookmarkButton />
+        <RememberButton />
       </group>
     </>
   );
@@ -107,15 +112,47 @@ function BookmarkButton() {
   return (
     <Button3D
       label={t("main.bookmark")}
-      width={0.3}
+      width={0.24}
       color="#5a4a2a"
-      position={[0.17, 0, 0]}
+      position={[0, 0, 0]}
       disabled={!lastSpoken || !group}
       onPress={() => {
         if (!lastSpoken || !group) return;
         send("phrase.save", { text: lastSpoken, groupId: group.id });
         useHeadset.setState({ lastSpoken: null });
         notify(t("status.savedTo", { group: group.name }));
+      }}
+    />
+  );
+}
+
+/** Saves the last minute as a memory, asking for consent first; offers Undo while the new memory is announced. */
+function RememberButton() {
+  const storeChat = useConsent((s) => s.storeChat);
+  const justSaved = useMemories((s) => s.justSaved);
+
+  useEffect(() => {
+    if (!justSaved) return;
+    notify(t("memories.remembered", { summary: justSaved.summary }));
+    // Undo lasts as long as the announcement, so it never shows without saying what it would undo.
+    const timer = setTimeout(() => useMemories.setState({ justSaved: null }), NOTICE_MS);
+    return () => clearTimeout(timer);
+  }, [justSaved]);
+  // Leaving the main view ends the chance to undo, so a memory that arrives meanwhile isn't announced on return.
+  useEffect(() => () => useMemories.setState({ justSaved: null, awaiting: false }), []);
+
+  return (
+    <Button3D
+      label={justSaved ? t("memories.undo") : t("memories.remember")}
+      width={0.24}
+      color={justSaved ? "#a33a2e" : "#2e6b7d"}
+      position={[0.25, 0, 0]}
+      onPress={() => {
+        if (justSaved) {
+          send("memory.delete", { memoryId: justSaved.id });
+          useMemories.setState({ justSaved: null });
+        } else if (storeChat) remember();
+        else showView({ kind: "consent" });
       }}
     />
   );
