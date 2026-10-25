@@ -1,0 +1,17 @@
+# Gateway on :8443 serving /ws, /api, /clips and the built apps at /headset/ and /phone/.
+# Rendered by `deploy/cadence.sh install`; the binary is built by `deploy/cadence.sh deploy`.
+[Unit]
+Description=Cadence gateway
+Wants=cadence-models.service
+After=cadence-models.service
+
+[Service]
+# The gateway's defaults (./data, ./certs, ./apps) and the paths in .env are relative to the repo root.
+WorkingDirectory=@REPO@
+EnvironmentFile=-@REPO@/.env
+ExecStart=@REPO@/services/gateway/bin/gateway
+Restart=on-failure
+RestartSec=2
+
+[Install]
+WantedBy=default.target

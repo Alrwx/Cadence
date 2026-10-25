@@ -1,0 +1,19 @@
+# Model service (STT, suggestions, TTS) on 127.0.0.1:8000. Rendered by `deploy/cadence.sh install`.
+[Unit]
+Description=Cadence model service
+Wants=cadence-ollama.service
+After=cadence-ollama.service
+# Restarting Ollama restarts this too, so Gemma is back on the GPU before TTS grows its allocator.
+PartOf=cadence-ollama.service
+
+[Service]
+WorkingDirectory=@REPO@/services/models
+EnvironmentFile=-@REPO@/.env
+# .env holds the Mac's dev defaults (mlx, mocks, ./data), so the deploy values win here.
+ExecStart=/usr/bin/env MODELS_BACKEND=@BACKEND@ DATA_DIR=@REPO@/data \
+	@UV@ run --extra @BACKEND@ uvicorn app.main:app --host 127.0.0.1 --port 8000
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=default.target

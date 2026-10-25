@@ -1,0 +1,17 @@
+# Ollama for suggestions (Gemma). Rendered into ~/.config/systemd/user by `deploy/cadence.sh install`.
+[Unit]
+Description=Cadence Ollama (suggestions)
+
+[Service]
+Environment=OLLAMA_HOST=127.0.0.1:11434
+Environment=OLLAMA_KEEP_ALIVE=-1
+EnvironmentFile=-@REPO@/.env
+ExecStart=@OLLAMA@ serve
+# Load Gemma before the model service starts: on the 10 GB 3080 it only fits fully on the GPU if it loads before TTS.
+ExecStartPost=@REPO@/deploy/cadence.sh warm-ollama
+TimeoutStartSec=300
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=default.target

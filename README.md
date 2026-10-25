@@ -74,6 +74,8 @@ make test         # contract, gateway, model-service, and client tests
 
 The dev servers proxy `/ws` and `/clips` to the gateway, so add `?session=<id>` to both URLs to pair a headset with a phone (default `demo`). After editing `packages/protocol/schema/`, run `make protocol` to regenerate the TS and Go types.
 
+**Shared test server:** to keep the whole stack running on pserver (the 3080) as services that teammates open over Tailscale, see [`deploy/README.md`](deploy/README.md).
+
 **On the Quest:** join the same Wi-Fi as the laptop, open the HTTPS URL in Quest Browser, accept the certificate, and tap "Enter". Over USB: `adb reverse tcp:5173 tcp:5173` and open `https://localhost:5173/headset/`. On a desktop, Meta's Immersive Web Emulator works for layout (not passthrough or hand gestures).
 
 **Demo hardware:** MacBook Pro M4 Pro (24 GB), Quest 3S, a phone, and our own hotspot (don't rely on venue Wi-Fi).

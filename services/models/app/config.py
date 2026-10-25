@@ -30,8 +30,13 @@ class Settings:
     suggest_model: str = field(default_factory=lambda: _env("SUGGEST_MODEL", "gemma4:e4b"))
     ollama_url: str = field(default_factory=lambda: _env("OLLAMA_URL", "http://127.0.0.1:11434"))
     data_dir: Path = field(default_factory=lambda: Path(_env("DATA_DIR", "./data")))
-    default_voice_audio: Path = ASSETS / "default_voice.wav"
-    default_voice_text: Path = ASSETS / "default_voice.txt"
+    # The "default" voice's reference clip + transcript. Point these outside the repo to use a real person's voice.
+    default_voice_audio: Path = field(
+        default_factory=lambda: Path(_env("DEFAULT_VOICE_AUDIO", str(ASSETS / "default_voice.wav")))
+    )
+    default_voice_text: Path = field(
+        default_factory=lambda: Path(_env("DEFAULT_VOICE_TEXT", str(ASSETS / "default_voice.txt")))
+    )
     # Up to this many /tts requests for the same voice that arrive together are synthesized in one batch.
     tts_max_batch: int = field(default_factory=lambda: int(_env("TTS_MAX_BATCH", "4")))
     tts_batch_window_ms: int = field(default_factory=lambda: int(_env("TTS_BATCH_WINDOW_MS", "30")))
