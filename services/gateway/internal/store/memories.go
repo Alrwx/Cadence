@@ -2,6 +2,7 @@ package store
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"fmt"
 	"strings"
@@ -28,14 +29,25 @@ type Conversation struct {
 // activeStoreChat takes the person id as its one parameter.
 const activeStoreChat = `EXISTS (SELECT 1 FROM consent WHERE person_id = ? AND kind = 'store_chat' AND revoked_at IS NULL)`
 
-// StoreChat reports whether the person currently grants store_chat consent.
-func (s *Store) StoreChat(ctx context.Context, personID string) (bool, error) {
-	var granted bool
-	if err := s.DB.QueryRowContext(ctx, "SELECT "+activeStoreChat, personID).Scan(&granted); err != nil {
-		return false, fmt.Errorf("store_chat consent: %w", err)
+// StoreChatConsent returns the id of the person's active store_chat consent, or "" if it isn't granted.
+func (s *Store) StoreChatConsent(ctx context.Context, personID string) (string, error) {
+	var id string
+	err := s.DB.QueryRowContext(ctx,
+		"SELECT id FROM consent WHERE person_id = ? AND kind = 'store_chat' AND revoked_at IS NULL", personID).Scan(&id)
+	if errors.Is(err, sql.ErrNoRows) {
+		return "", nil
 	}
-	return granted, nil
+	if err != nil {
+		return "", fmt.Errorf("store_chat consent: %w", err)
+	}
+	return id, nil
 }
+
+// CleanLabel normalizes a saved conversation's label, or returns ErrInvalid.
+func CleanLabel(label string) (string, error) { return cleanText(label, maxLabelLen) }
+
+// stillGranted takes the consent id and person id as its parameters.
+const stillGranted = `EXISTS (SELECT 1 FROM consent WHERE id = ? AND person_id = ? AND revoked_at IS NULL)`
 
 // SetStoreChat grants or revokes store_chat consent. Revoking deletes every memory and saved conversation.
 func (s *Store) SetStoreChat(ctx context.Context, personID string, granted bool) error {
@@ -71,15 +83,16 @@ func (s *Store) SetStoreChat(ctx context.Context, personID string, granted bool)
 	return nil
 }
 
-// AddMemory stores a quick-memory summary. It is ErrNoConsent if store_chat isn't granted at the moment of the insert.
-func (s *Store) AddMemory(ctx context.Context, personID, summary string) (Memory, error) {
+// AddMemory stores a quick-memory summary. It is ErrNoConsent unless consentID, the store_chat consent that was
+// active when the speech was captured, is still unrevoked: a revoke followed by a new grant doesn't cover it.
+func (s *Store) AddMemory(ctx context.Context, personID, consentID, summary string) (Memory, error) {
 	m := Memory{ID: newID("mem"), Summary: strings.TrimSpace(summary), CreatedAt: now()}
 	if m.Summary == "" {
 		return Memory{}, fmt.Errorf("%w: empty summary", ErrInvalid)
 	}
 	res, err := s.DB.ExecContext(ctx, `
-		INSERT INTO memory (id, person_id, summary, created_at) SELECT ?, ?, ?, ? WHERE `+activeStoreChat,
-		m.ID, personID, m.Summary, m.CreatedAt, personID)
+		INSERT INTO memory (id, person_id, summary, created_at) SELECT ?, ?, ?, ? WHERE `+stillGranted,
+		m.ID, personID, m.Summary, m.CreatedAt, consentID, personID)
 	if err != nil {
 		return Memory{}, fmt.Errorf("add memory: %w", err)
 	}
@@ -119,9 +132,9 @@ func (s *Store) DeleteMemory(ctx context.Context, personID, memoryID string) err
 }
 
 // SaveConversation stores a labelled conversation summary (never its transcript). startedAt is in Unix ms.
-// It is ErrNoConsent if store_chat isn't granted at the moment of the insert.
-func (s *Store) SaveConversation(ctx context.Context, personID, label, summary string, startedAt int64) (Conversation, error) {
-	label, err := cleanText(label, maxLabelLen)
+// Like AddMemory, it is ErrNoConsent unless consentID is still unrevoked.
+func (s *Store) SaveConversation(ctx context.Context, personID, consentID, label, summary string, startedAt int64) (Conversation, error) {
+	label, err := CleanLabel(label)
 	if err != nil {
 		return Conversation{}, err
 	}
@@ -131,8 +144,8 @@ func (s *Store) SaveConversation(ctx context.Context, personID, label, summary s
 	}
 	res, err := s.DB.ExecContext(ctx, `
 		INSERT INTO saved_conversation (id, person_id, label, summary, started_at, created_at)
-		SELECT ?, ?, ?, ?, ?, ? WHERE `+activeStoreChat,
-		c.ID, personID, c.Label, c.Summary, c.StartedAt, now(), personID)
+		SELECT ?, ?, ?, ?, ?, ? WHERE `+stillGranted,
+		c.ID, personID, c.Label, c.Summary, c.StartedAt, now(), consentID, personID)
 	if err != nil {
 		return Conversation{}, fmt.Errorf("save conversation: %w", err)
 	}

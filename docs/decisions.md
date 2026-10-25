@@ -64,6 +64,6 @@ Append-only. One entry per decision: date, decision, why, who.
 **Who:** PaoloAJ (Dev 3)
 
 ### 2026-10-25 – Saved conversations belong to the person; revoking store_chat deletes them too
-**Decision:** Migration 004 rebuilds `saved_conversation` with `person_id` and `started_at` instead of a `session_id` foreign key, and adds a `memory` table. Revoking `store_chat` deletes every memory *and* every saved conversation. Memories reach `/suggest` by the keyword rule in §7 (at most 5 sharing a content word with the last 3 turns); attached conversations always do.
+**Decision:** Migration 004 rebuilds `saved_conversation` with `person_id` and `started_at` instead of a `session_id` foreign key, and adds a `memory` table. Revoking `store_chat` deletes every memory *and* every saved conversation. Memories reach `/suggest` by the keyword rule in §7 (at most 5 sharing a content word with the last 3 turns); attached conversations always do. A saved conversation is the turns since the last save or since the last 10-minute silence, whichever is later (the protocol has no "conversation started" event, and `?session=demo` is reused all day); the gateway keeps up to 200 turns in memory for it.
 **Why:** The gateway writes no `session` rows, so every insert failed the foreign key, and session ids are client-chosen and reused (`?session=demo`) while a saved conversation is attached in later sessions. Both tables hold summaries of conversation content, which §2 allows only while `store_chat` is granted.
 **Who:** David (Dev 4)

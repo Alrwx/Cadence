@@ -43,15 +43,17 @@ type Orchestrator struct {
 }
 
 type sessionState struct {
-	mu          sync.Mutex
-	hub         *hub.Session // set on connect, so a voice change can refresh this session's phrases
-	machine     *session.Machine
-	turnID      string
-	turnSeq     int
-	suggestions map[string]string // suggestion id -> text, for the current turn
-	history     []heardTurn
-	attached    []string           // saved conversation ids used as /suggest context (conversation.attach)
-	cancelTurn  context.CancelFunc // cancels the in-flight /suggest for the current turn
+	mu           sync.Mutex
+	hub          *hub.Session // set on connect, so a voice change can refresh this session's phrases
+	machine      *session.Machine
+	turnID       string
+	turnSeq      int
+	suggestions  map[string]string // suggestion id -> text, for the current turn
+	history      []heardTurn
+	attached     []string           // saved conversation ids used as /suggest context (conversation.attach)
+	savedThrough time.Time          // when the last turn of the last saved conversation was said
+	summarizing  bool               // a memory.save or conversation.save is waiting on /summarize
+	cancelTurn   context.CancelFunc // cancels the in-flight /suggest for the current turn
 
 	// The speech-to-text stream is managed separately because opening it can block on a dial.
 	sttMu       sync.Mutex

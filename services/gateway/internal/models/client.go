@@ -1,5 +1,5 @@
 // Package models is the gateway's client for the Python model service (AGENTS(GH).md §6.2).
-// The gateway owns timeouts: /suggest 3 s, /tts 6 s.
+// The gateway owns timeouts: /suggest 3 s, /tts 6 s, /summarize 12 s.
 package models
 
 import (
@@ -15,8 +15,8 @@ import (
 const (
 	SuggestTimeout = 3 * time.Second
 	TTSTimeout     = 6 * time.Second
-	// Not in the contract; a whole conversation is a longer prompt than /suggest's.
-	SummarizeTimeout = 20 * time.Second
+	// Just over the model service's own 10 s Ollama timeout, so its error comes back rather than a bare cancel.
+	SummarizeTimeout = 12 * time.Second
 )
 
 type Client struct {

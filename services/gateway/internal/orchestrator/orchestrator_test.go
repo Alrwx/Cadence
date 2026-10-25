@@ -27,10 +27,11 @@ type fakeModels struct {
 	ttsCalls atomic.Int64
 	delay    time.Duration // /tts latency
 
-	suggestDelay time.Duration
-	suggestFail  bool
-	sttDown      bool
-	sttDials     atomic.Int64
+	suggestDelay   time.Duration
+	suggestFail    bool
+	summarizeDelay time.Duration
+	sttDown        bool
+	sttDials       atomic.Int64
 
 	mu            sync.Mutex
 	suggestReqs   []models.SuggestRequest
@@ -102,6 +103,7 @@ func (f *fakeModels) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		f.mu.Lock()
 		f.summarizeReqs = append(f.summarizeReqs, req.Turns)
 		f.mu.Unlock()
+		time.Sleep(f.summarizeDelay)
 		_ = json.NewEncoder(w).Encode(map[string]any{"summary": fakeSummary, "ms": 1})
 	case "/stt":
 		f.sttDials.Add(1)

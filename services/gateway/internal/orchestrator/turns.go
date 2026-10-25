@@ -17,8 +17,8 @@ const (
 	partialInterval = 400 * time.Millisecond // transcript.partial is rate-limited to this
 	sttRetryAfter   = 5 * time.Second        // wait this long after a failed /stt dial before trying again
 	suggestCount    = 3
-	historySent     = 20 // turns sent to /suggest
-	historyKept     = 50 // turns kept in memory per session
+	historySent     = 20  // turns sent to /suggest
+	historyKept     = 200 // turns kept in memory per session; a saved conversation can be this long
 )
 
 // endTurnLocked cancels the turn's in-flight /suggest and forgets its suggestions. Callers hold ss.mu.
@@ -41,19 +41,6 @@ func (ss *sessionState) addTurnLocked(speaker, text string) {
 	if len(ss.history) > historyKept {
 		ss.history = append([]heardTurn(nil), ss.history[len(ss.history)-historyKept:]...)
 	}
-}
-
-// turnsSince returns the kept turns said at or after since, oldest first.
-func (ss *sessionState) turnsSince(since time.Time) []heardTurn {
-	ss.mu.Lock()
-	defer ss.mu.Unlock()
-	var out []heardTurn
-	for _, t := range ss.history {
-		if !t.At.Before(since) {
-			out = append(out, t)
-		}
-	}
-	return out
 }
 
 // sttStream returns the session's open STT stream, dialing one if needed. After a failed dial it returns nil

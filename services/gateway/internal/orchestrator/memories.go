@@ -19,6 +19,8 @@ const (
 	memoryWindow = 60 * time.Second // "Remember this" summarizes this much of the conversation
 	memoriesSent = 5                // at most this many memories go to /suggest
 	keywordTurns = 3                // memories must share a content word with this many recent turns
+	// A saved conversation starts after the last one saved, or after a silence this long, whichever is later.
+	conversationGap = 10 * time.Minute
 )
 
 // onMemoryEvent handles consent.set, memory.save/delete and conversation.save/delete/attach. Only AI summaries
@@ -40,9 +42,9 @@ func (o *Orchestrator) onMemoryEvent(ctx context.Context, s *hub.Session, ss *se
 			o.sendConversations(ctx, s)
 		}
 	case *protocol.MemorySaveData:
-		o.summarizeAndStore(ctx, s, ss, time.Now().Add(-memoryWindow), "Nothing to remember from the last minute.",
-			func(ctx context.Context, summary string, _ time.Time) error {
-				if _, err := o.store.AddMemory(ctx, o.personID, summary); err != nil {
+		o.summarizeAndStore(ctx, s, ss, ss.lastMinuteLocked, "Nothing to remember from the last minute.",
+			func(ctx context.Context, consentID, summary string, _ []heardTurn) error {
+				if _, err := o.store.AddMemory(ctx, o.personID, consentID, summary); err != nil {
 					return err
 				}
 				o.sendMemories(ctx, s)
@@ -54,11 +56,19 @@ func (o *Orchestrator) onMemoryEvent(ctx context.Context, s *hub.Session, ss *se
 		}
 		o.sendMemories(ctx, s)
 	case *protocol.ConversationSaveData:
-		o.summarizeAndStore(ctx, s, ss, time.Time{}, "Nothing to save from this conversation yet.",
-			func(ctx context.Context, summary string, startedAt time.Time) error {
-				if _, err := o.store.SaveConversation(ctx, o.personID, d.Label, summary, startedAt.UnixMilli()); err != nil {
+		label, err := store.CleanLabel(d.Label)
+		if err != nil {
+			o.memoryError(ctx, s, err)
+			return
+		}
+		o.summarizeAndStore(ctx, s, ss, ss.conversationLocked, "Nothing to save from this conversation yet.",
+			func(ctx context.Context, consentID, summary string, heard []heardTurn) error {
+				if _, err := o.store.SaveConversation(ctx, o.personID, consentID, label, summary, heard[0].At.UnixMilli()); err != nil {
 					return err
 				}
+				ss.mu.Lock()
+				ss.savedThrough = heard[len(heard)-1].At
+				ss.mu.Unlock()
 				o.sendConversations(ctx, s)
 				return nil
 			})
@@ -74,20 +84,30 @@ func (o *Orchestrator) onMemoryEvent(ctx context.Context, s *hub.Session, ss *se
 	}
 }
 
-// summarizeAndStore summarizes the turns said since `since` in the background, then hands the summary to save.
-// It fails fast without store_chat consent or with nothing heard; save re-checks consent as it inserts.
-func (o *Orchestrator) summarizeAndStore(ctx context.Context, s *hub.Session, ss *sessionState, since time.Time,
-	nothingHeard string, save func(ctx context.Context, summary string, startedAt time.Time) error) {
-	if granted, err := o.store.StoreChat(ctx, o.personID); err != nil {
+// summarizeAndStore summarizes the turns pick chooses (called with ss.mu held) in the background, then hands the
+// summary to save along with the consent it was captured under. It fails fast without store_chat consent or with
+// nothing heard, and ignores a save while the session's previous summary is still running (repeated taps).
+func (o *Orchestrator) summarizeAndStore(ctx context.Context, s *hub.Session, ss *sessionState, pick func() []heardTurn,
+	nothingHeard string, save func(ctx context.Context, consentID, summary string, heard []heardTurn) error) {
+	consentID, err := o.store.StoreChatConsent(ctx, o.personID)
+	if err == nil && consentID == "" {
+		err = store.ErrNoConsent
+	}
+	if err != nil {
 		o.memoryError(ctx, s, err)
 		return
-	} else if !granted {
-		o.memoryError(ctx, s, store.ErrNoConsent)
+	}
+	ss.mu.Lock()
+	if ss.summarizing {
+		ss.mu.Unlock()
+		slog.Info("save ignored: a summary is already running", "session", s.ID)
 		return
 	}
-	heard := ss.turnsSince(since)
+	heard := pick()
+	ss.summarizing = len(heard) > 0
+	ss.mu.Unlock()
 	if len(heard) == 0 {
-		_ = s.Send(ctx, hub.Headset, protocol.TypeError, "", protocol.ErrorData{Code: "nothing_heard", Message: nothingHeard, Recoverable: true})
+		o.sendError(ctx, s, "nothing_heard", nothingHeard)
 		return
 	}
 	turns := make([]models.Turn, len(heard))
@@ -95,6 +115,11 @@ func (o *Orchestrator) summarizeAndStore(ctx context.Context, s *hub.Session, ss
 		turns[i] = t.Turn
 	}
 	go func() {
+		defer func() {
+			ss.mu.Lock()
+			ss.summarizing = false
+			ss.mu.Unlock()
+		}()
 		ctx := context.Background()
 		summary, err := o.models.Summarize(ctx, turns, o.locale)
 		if err == nil && strings.TrimSpace(summary) == "" {
@@ -105,19 +130,46 @@ func (o *Orchestrator) summarizeAndStore(ctx context.Context, s *hub.Session, ss
 			o.sendError(ctx, s, "summarize_failed", "Couldn't summarize that. Try again in a moment.")
 			return
 		}
-		if err := save(ctx, summary, heard[0].At); err != nil {
+		if err := save(ctx, consentID, summary, heard); err != nil {
 			o.memoryError(ctx, s, err)
 		}
 	}()
 }
 
+// lastMinuteLocked returns the turns said within memoryWindow. Callers hold ss.mu.
+func (ss *sessionState) lastMinuteLocked() []heardTurn {
+	cutoff := time.Now().Add(-memoryWindow)
+	var out []heardTurn
+	for _, t := range ss.history {
+		if !t.At.Before(cutoff) {
+			out = append(out, t)
+		}
+	}
+	return out
+}
+
+// conversationLocked returns the turns since the last saved conversation or the last conversationGap of
+// silence, whichever is later. Callers hold ss.mu.
+func (ss *sessionState) conversationLocked() []heardTurn {
+	start := 0
+	for i, t := range ss.history {
+		switch {
+		case !t.At.After(ss.savedThrough):
+			start = i + 1
+		case i > 0 && t.At.Sub(ss.history[i-1].At) > conversationGap:
+			start = i
+		}
+	}
+	return append([]heardTurn(nil), ss.history[start:]...)
+}
+
 func (o *Orchestrator) sendConsent(ctx context.Context, s *hub.Session) {
-	granted, err := o.store.StoreChat(ctx, o.personID)
+	consentID, err := o.store.StoreChatConsent(ctx, o.personID)
 	if err != nil {
 		slog.Error("load consent", "session", s.ID, "err", err)
 		return // the headset assumes off and asks again
 	}
-	_ = s.Send(ctx, hub.Headset, protocol.TypeConsent, "", protocol.ConsentData{StoreChat: granted})
+	_ = s.Send(ctx, hub.Headset, protocol.TypeConsent, "", protocol.ConsentData{StoreChat: consentID != ""})
 }
 
 func (o *Orchestrator) sendMemories(ctx context.Context, s *hub.Session) {
@@ -179,11 +231,14 @@ func (o *Orchestrator) suggestContext(ss *sessionState, history []models.Turn) (
 		if err != nil {
 			slog.Error("conversations for suggest", "err", err)
 		}
+		byID := make(map[string]store.Conversation, len(convs))
 		for _, c := range convs {
-			for _, id := range attached {
-				if c.ID == id {
-					items = append(items, models.ContextItem{Label: c.Label, Summary: c.Summary})
-				}
+			byID[c.ID] = c
+		}
+		for _, id := range attached {
+			if c, ok := byID[id]; ok {
+				items = append(items, models.ContextItem{Label: c.Label, Summary: c.Summary})
+				delete(byID, id) // an id attached twice is sent once
 			}
 		}
 	}

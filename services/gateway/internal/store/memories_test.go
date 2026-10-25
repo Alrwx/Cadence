@@ -13,27 +13,34 @@ func TestStoreChatGatesAndRevokeWipes(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if _, err := s.AddMemory(ctx, "p1", "The doctor visits at 3 pm."); !errors.Is(err, ErrNoConsent) {
+	if id, err := s.StoreChatConsent(ctx, "p1"); err != nil || id != "" {
+		t.Fatalf("StoreChatConsent = %q, %v before granting", id, err)
+	}
+	if _, err := s.AddMemory(ctx, "p1", "consent_missing", "The doctor visits at 3 pm."); !errors.Is(err, ErrNoConsent) {
 		t.Fatalf("memory without consent: err = %v, want ErrNoConsent", err)
 	}
-	if _, err := s.SaveConversation(ctx, "p1", "Dr. Lee", "Started lisinopril.", 1); !errors.Is(err, ErrNoConsent) {
+	if _, err := s.SaveConversation(ctx, "p1", "consent_missing", "Dr. Lee", "Started lisinopril.", 1); !errors.Is(err, ErrNoConsent) {
 		t.Fatalf("conversation without consent: err = %v, want ErrNoConsent", err)
 	}
 
 	// Granting twice keeps one active consent record.
+	var consentIDs []string
 	for range 2 {
 		if err := s.SetStoreChat(ctx, "p1", true); err != nil {
 			t.Fatal(err)
 		}
+		id, _ := s.StoreChatConsent(ctx, "p1")
+		consentIDs = append(consentIDs, id)
 	}
-	if on, err := s.StoreChat(ctx, "p1"); err != nil || !on {
-		t.Fatalf("StoreChat = %v, %v after granting", on, err)
+	consent := consentIDs[0]
+	if consent == "" || consentIDs[1] != consent {
+		t.Fatalf("consent ids after granting twice = %q", consentIDs)
 	}
-	if _, err := s.AddMemory(ctx, "p1", "The doctor visits at 3 pm."); err != nil {
+	if _, err := s.AddMemory(ctx, "p1", consent, "The doctor visits at 3 pm."); err != nil {
 		t.Fatal(err)
 	}
-	// Foreign keys are on and the gateway writes no session rows; the save must not depend on one.
-	cv, err := s.SaveConversation(ctx, "p1", "  Dr. Lee  ", "Started lisinopril.", 1)
+	// Foreign keys are on and the save must not depend on a session row.
+	cv, err := s.SaveConversation(ctx, "p1", consent, "  Dr. Lee  ", "Started lisinopril.", 1)
 	if err != nil || cv.Label != "Dr. Lee" {
 		t.Fatalf("SaveConversation = %+v, %v", cv, err)
 	}
@@ -41,7 +48,7 @@ func TestStoreChatGatesAndRevokeWipes(t *testing.T) {
 	if err := s.SetStoreChat(ctx, "p1", false); err != nil {
 		t.Fatal(err)
 	}
-	if on, _ := s.StoreChat(ctx, "p1"); on {
+	if id, _ := s.StoreChatConsent(ctx, "p1"); id != "" {
 		t.Fatal("store_chat still granted after revoking")
 	}
 	mems, _ := s.Memories(ctx, "p1")
@@ -53,6 +60,14 @@ func TestStoreChatGatesAndRevokeWipes(t *testing.T) {
 	if err := s.DB.QueryRow(`SELECT COUNT(*) FILTER (WHERE revoked_at IS NULL), COUNT(*) FILTER (WHERE revoked_at IS NOT NULL)
 		FROM consent WHERE kind = 'store_chat'`).Scan(&active, &revoked); err != nil || active != 0 || revoked != 1 {
 		t.Fatalf("store_chat consent rows: %d active, %d revoked, err %v; want 0 and 1", active, revoked, err)
+	}
+
+	// A summary of speech captured under the revoked consent isn't stored under a new grant.
+	if err := s.SetStoreChat(ctx, "p1", true); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.AddMemory(ctx, "p1", consent, "From before the revoke."); !errors.Is(err, ErrNoConsent) {
+		t.Fatalf("memory under a revoked consent: err = %v, want ErrNoConsent", err)
 	}
 }
 
@@ -67,9 +82,10 @@ func TestMemoriesAndConversationsCRUD(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
+	consent, _ := s.StoreChatConsent(ctx, "p1")
 
-	first, _ := s.AddMemory(ctx, "p1", "first")
-	second, _ := s.AddMemory(ctx, "p1", "second")
+	first, _ := s.AddMemory(ctx, "p1", consent, "first")
+	second, _ := s.AddMemory(ctx, "p1", consent, "second")
 	if mems, _ := s.Memories(ctx, "p1"); len(mems) != 2 || mems[0].ID != second.ID {
 		t.Fatalf("memories = %+v, want newest first", mems)
 	}
@@ -83,11 +99,11 @@ func TestMemoriesAndConversationsCRUD(t *testing.T) {
 		t.Fatalf("memories after delete = %+v", mems)
 	}
 
-	if _, err := s.SaveConversation(ctx, "p1", "   ", "summary", 1); !errors.Is(err, ErrInvalid) {
+	if _, err := s.SaveConversation(ctx, "p1", consent, "   ", "summary", 1); !errors.Is(err, ErrInvalid) {
 		t.Fatalf("blank label: err = %v, want ErrInvalid", err)
 	}
-	older, _ := s.SaveConversation(ctx, "p1", "Older", "a", 1)
-	newer, _ := s.SaveConversation(ctx, "p1", "Newer", "b", 2)
+	older, _ := s.SaveConversation(ctx, "p1", consent, "Older", "a", 1)
+	newer, _ := s.SaveConversation(ctx, "p1", consent, "Newer", "b", 2)
 	if convs, _ := s.Conversations(ctx, "p1"); len(convs) != 2 || convs[0].ID != newer.ID {
 		t.Fatalf("conversations = %+v, want newest first", convs)
 	}

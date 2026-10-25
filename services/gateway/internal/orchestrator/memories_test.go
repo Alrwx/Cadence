@@ -63,9 +63,6 @@ func TestStoreChatConsentOnOffAndRevokeWipesMemories(t *testing.T) {
 	headset.send(protocol.TypeConsentSet, protocol.ConsentSetData{Kind: store.ConsentStoreChat, Granted: false})
 	headset.expect(protocol.TypeConsent, &consent, func() bool { return !consent.StoreChat })
 	headset.expect(protocol.TypeMemories, &mems, func() bool { return len(mems.Items) == 0 })
-	if left, _ := o.store.Memories(context.Background(), o.personID); len(left) != 0 {
-		t.Fatalf("%d memories stored after revoking store_chat", len(left))
-	}
 
 	// A reconnecting headset is told the current setting.
 	headset.conn.CloseNow()
@@ -82,10 +79,7 @@ func TestStoreChatConsentOnOffAndRevokeWipesMemories(t *testing.T) {
 func TestOnlySummariesReachTheDB(t *testing.T) {
 	fm := &fakeModels{}
 	o, headset, phone := pairedSession(t, fm)
-	ctx := context.Background()
-	if err := o.store.SetStoreChat(ctx, o.personID, true); err != nil {
-		t.Fatal(err)
-	}
+	grantStoreChat(t, o)
 
 	headset.send(protocol.TypeMemorySave, protocol.MemorySaveData{})
 	headset.expectError("nothing_heard")
@@ -135,6 +129,83 @@ func TestOnlySummariesReachTheDB(t *testing.T) {
 	if where := tablesContaining(t, o.store.DB, fakeSummary); len(where) > 0 {
 		t.Errorf("summary still in %v after deleting", where)
 	}
+}
+
+// grantStoreChat turns store_chat on directly in the store and returns the consent id.
+func grantStoreChat(t *testing.T, o *Orchestrator) string {
+	t.Helper()
+	ctx := context.Background()
+	if err := o.store.SetStoreChat(ctx, o.personID, true); err != nil {
+		t.Fatal(err)
+	}
+	id, err := o.store.StoreChatConsent(ctx, o.personID)
+	if err != nil || id == "" {
+		t.Fatalf("store_chat consent = %q, %v", id, err)
+	}
+	return id
+}
+
+func TestSavedConversationStartsAfterLastSaveOrLongSilence(t *testing.T) {
+	fm := &fakeModels{}
+	o, headset, _ := pairedSession(t, fm)
+	grantStoreChat(t, o)
+	now := time.Now()
+	turn := func(text string, ago time.Duration) heardTurn {
+		return heardTurn{models.Turn{Speaker: "other", Text: text}, now.Add(-ago)}
+	}
+	ss := o.session("s1")
+	ss.mu.Lock()
+	ss.history = []heardTurn{
+		turn("Your prescription is ready.", 40*time.Minute),
+		turn("I'm Dr. Lee.", 15*time.Minute), // 25 minutes of silence before this: a new conversation
+		turn("Take one pill at breakfast.", 14*time.Minute),
+	}
+	ss.mu.Unlock()
+
+	var convs protocol.ConversationsData
+	headset.send(protocol.TypeConversationSave, protocol.ConversationSaveData{Label: "Dr. Lee"})
+	headset.expect(protocol.TypeConversations, &convs, func() bool { return len(convs.Items) == 1 })
+	if got, want := convs.Items[0].StartedAt, now.Add(-15*time.Minute).UnixMilli(); got != want {
+		t.Errorf("startedAt = %d, want %d (the first turn after the silence)", got, want)
+	}
+
+	ss.mu.Lock()
+	ss.history = append(ss.history, turn("Any questions?", 13*time.Minute))
+	ss.mu.Unlock()
+	headset.send(protocol.TypeConversationSave, protocol.ConversationSaveData{Label: "Dr. Lee, part 2"})
+	headset.expect(protocol.TypeConversations, &convs, func() bool { return len(convs.Items) == 2 })
+
+	reqs := fm.summarizeRequests()
+	texts := func(turns []models.Turn) []string {
+		var out []string
+		for _, t := range turns {
+			out = append(out, t.Text)
+		}
+		return out
+	}
+	if len(reqs) != 2 || !reflect.DeepEqual(texts(reqs[0]), []string{"I'm Dr. Lee.", "Take one pill at breakfast."}) ||
+		!reflect.DeepEqual(texts(reqs[1]), []string{"Any questions?"}) {
+		t.Fatalf("/summarize got %+v; want the turns after the silence, then only those after the save", reqs)
+	}
+}
+
+func TestRepeatedRememberTapsMakeOneMemory(t *testing.T) {
+	fm := &fakeModels{summarizeDelay: 200 * time.Millisecond}
+	o, headset, phone := pairedSession(t, fm)
+	grantStoreChat(t, o)
+	hearUtterance(headset, phone)
+
+	headset.send(protocol.TypeMemorySave, protocol.MemorySaveData{})
+	headset.send(protocol.TypeMemorySave, protocol.MemorySaveData{})
+	var mems protocol.MemoriesData
+	headset.expect(protocol.TypeMemories, &mems, func() bool { return len(mems.Items) == 1 })
+	if n := len(fm.summarizeRequests()); n != 1 {
+		t.Fatalf("%d /summarize calls for two quick taps, want 1", n)
+	}
+
+	// Once the summary is in, the next tap works again.
+	headset.send(protocol.TypeMemorySave, protocol.MemorySaveData{})
+	headset.expect(protocol.TypeMemories, &mems, func() bool { return len(mems.Items) == 2 })
 }
 
 // tablesContaining lists the tables with a text value that contains needle, in name order.
@@ -187,24 +258,22 @@ func TestMemoriesAndAttachedSummariesReachSuggest(t *testing.T) {
 	fm := &fakeModels{}
 	o, headset, phone := pairedSession(t, fm)
 	ctx := context.Background()
-	if err := o.store.SetStoreChat(ctx, o.personID, true); err != nil {
-		t.Fatal(err)
-	}
+	consent := grantStoreChat(t, o)
 	related := "Their daughter is visiting today at 5 pm."
 	for _, summary := range []string{related, "The TV remote is on the shelf."} {
-		if _, err := o.store.AddMemory(ctx, o.personID, summary); err != nil {
+		if _, err := o.store.AddMemory(ctx, o.personID, consent, summary); err != nil {
 			t.Fatal(err)
 		}
 	}
-	lee, err := o.store.SaveConversation(ctx, o.personID, "Dr. Lee", "Started lisinopril for blood pressure.", 1)
+	lee, err := o.store.SaveConversation(ctx, o.personID, consent, "Dr. Lee", "Started lisinopril for blood pressure.", 1)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := o.store.SaveConversation(ctx, o.personID, "Dentist", "Not attached.", 2); err != nil {
+	if _, err := o.store.SaveConversation(ctx, o.personID, consent, "Dentist", "Not attached.", 2); err != nil {
 		t.Fatal(err)
 	}
 
-	headset.send(protocol.TypeConversationAttach, protocol.ConversationAttachData{ConversationIDs: []string{lee.ID}})
+	headset.send(protocol.TypeConversationAttach, protocol.ConversationAttachData{ConversationIDs: []string{lee.ID, lee.ID}})
 	// compose.start and cancel on the same socket are a barrier: once COMPOSING arrives, the attach was handled.
 	headset.send(protocol.TypeComposeStart, protocol.ComposeStartData{})
 	headset.expectState("COMPOSING")
@@ -223,7 +292,7 @@ func TestMemoriesAndAttachedSummariesReachSuggest(t *testing.T) {
 		t.Errorf("memories = %q, want only the one that shares a word with %q", got.Memories, fakeUtterance)
 	}
 	if want := []models.ContextItem{{Label: "Dr. Lee", Summary: "Started lisinopril for blood pressure."}}; !reflect.DeepEqual(got.Context, want) {
-		t.Errorf("context = %+v, want %+v", got.Context, want)
+		t.Errorf("context = %+v, want %+v (once, though attached twice)", got.Context, want)
 	}
 	if got.Locale != store.DefaultLocale {
 		t.Errorf("locale = %q", got.Locale)
