@@ -53,6 +53,8 @@ interface Session {
   /** What was said lately, for "Remember this". */
   heard: { text: string; at: number }[];
   unlocked: boolean;
+  /** Turns started by listener.say; the scripted scenario uses t_1. */
+  turnSeq: number;
 }
 
 const sessions = new Map<string, Session>();
@@ -72,6 +74,7 @@ function getSession(id: string): Session {
       id,
       clients: {},
       turnId: "t_1",
+      turnSeq: 1,
       clipTexts: new Map(),
       groups: [
         {
@@ -182,6 +185,55 @@ for (const step of scenario.steps) {
     for (const item of (step.data as EventDataMap["suggestions"]).items) SUGGESTION_TEXT[item.id] = item.text;
   }
 }
+const MAX_LISTENER_SAY = 500;
+const YES_NO_START = /^(do|does|did|are|is|was|were|can|could|would|will|should|shall|have|has|may)\b/i;
+
+/** Three canned replies for a typed listener line: yes/no answers for a yes/no question, like the real prompt. */
+function mockReplies(text: string): EventDataMap["suggestions"]["items"] {
+  const items: [string, "statement" | "question" | "yes_no"][] = YES_NO_START.test(text)
+    ? [
+        ["Yes, please.", "yes_no"],
+        ["No, thank you.", "yes_no"],
+        ["Can you say that again?", "question"],
+      ]
+    : text.endsWith("?")
+      ? [
+          ["I'm not sure yet.", "statement"],
+          ["Let me think about it.", "statement"],
+          ["Can you say that again?", "question"],
+        ]
+      : [
+          ["Okay, thank you.", "statement"],
+          ["Tell me more.", "statement"],
+          ["Can you say that again?", "question"],
+        ];
+  return items.map(([reply, kind], i) => ({ id: `sg_${newId("say")}_${i}`, text: reply, kind, audioReady: false }));
+}
+
+/** listener.say: typed stand-in for the listener's speech (the real gateway's dev tools), as a new turn. */
+function listenerSay(s: Session, from: Role, raw: string): void {
+  const error = (code: string, message: string) => send(s, from, "error", { code, message, recoverable: true });
+  const text = raw.split(/\s+/).filter(Boolean).join(" ");
+  if (!text) return error("empty_text", "Type what the listener said first.");
+  if ([...text].length > MAX_LISTENER_SAY) {
+    return error("text_too_long", `Keep it under ${MAX_LISTENER_SAY} characters.`);
+  }
+  if (!s.unlocked) return error("not_listening", "Tap Start on the phone first.");
+  s.turnId = `t_${++s.turnSeq}`;
+  hear(s, text);
+  send(s, "all", "transcript.final", { text, speaker: "other" });
+  send(s, "all", "state", { state: "SUGGESTING" });
+  const items = mockReplies(text);
+  for (const item of items) SUGGESTION_TEXT[item.id] = item.text;
+  setTimeout(() => {
+    send(s, "headset", "suggestions", { items });
+    send(s, "all", "state", { state: "CHOOSING" });
+    items.forEach((item, i) =>
+      setTimeout(() => send(s, "headset", "suggestion.audioReady", { id: item.id }), 300 + i * 200),
+    );
+  }, 600);
+}
+
 const INSTANT_TEXT: Record<string, string> = { yes: "Yes", no: "No", wait: "Give me a second", hello: "Hello", laugh: "Ha ha" };
 
 function handle(s: Session, from: Role, event: CadenceEvent): void {
@@ -194,6 +246,9 @@ function handle(s: Session, from: Role, event: CadenceEvent): void {
       break;
     case "select":
       speak(s, SUGGESTION_TEXT[event.data.suggestionId] ?? "(unknown suggestion)", "suggestion");
+      break;
+    case "listener.say":
+      listenerSay(s, from, event.data.text);
       break;
     case "instant":
       speak(s, INSTANT_TEXT[event.data.phraseId] ?? event.data.phraseId, "instant");

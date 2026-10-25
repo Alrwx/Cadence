@@ -6,7 +6,7 @@ import type { CadenceState } from "@cadence/shared";
 import { useEffect, useState, type FormEvent } from "react";
 import { useStore } from "zustand";
 import { createStore } from "zustand/vanilla";
-import { log, send, sessionId, store } from "./headset.ts";
+import { dismissError, log, send, sessionId, shownError, store } from "./headset.ts";
 
 const use = <T,>(select: (s: CadenceState) => T): T => useStore(store, select);
 
@@ -74,10 +74,34 @@ export function TestBench() {
 function Listener() {
   const captions = use((s) => s.captions);
   const partial = use((s) => s.partial);
+  const online = use((s) => s.connection) === "open";
+  const [text, setText] = useState("");
+
+  // Typed instead of spoken: the gateway treats it like a final transcript (listener.say, dev tools only).
+  const say = (e: FormEvent) => {
+    e.preventDefault();
+    const clean = text.trim();
+    if (!clean) return;
+    if (send("listener.say", { text: clean })) setText("");
+  };
+
   return (
     <div className="card">
-      <h3>Listener said</h3>
-      {captions.length === 0 && !partial && <p className="muted">Nothing yet.</p>}
+      <h3>Listener</h3>
+      <form className="buttons" onSubmit={say}>
+        <input
+          value={text}
+          onChange={(e) => setText(e.target.value)}
+          placeholder="Type what the listener says, e.g. Do you want some water?"
+          aria-label="What the listener says"
+          maxLength={500}
+        />
+        <button type="submit" className="primary" disabled={!online || !text.trim()}>
+          Say
+        </button>
+      </form>
+      <p className="muted small">Or talk near the laptop: the phone's mic still works.</p>
+      {captions.length === 0 && !partial && <p className="muted">Nothing said yet.</p>}
       {captions.slice(-3).map((c, i) => (
         <p key={i}>{c}</p>
       ))}
@@ -211,15 +235,21 @@ function SavedPhrases() {
 }
 
 function LastError() {
-  const error = use((s) => s.lastError);
+  const error = useStore(shownError, (s) => s.error);
   if (!error) return null;
   return (
-    <div className="card error">
-      <h3>Last error</h3>
+    <div className="card error" role="alert">
+      <div className="card-head">
+        <h3>Last error</h3>
+        <button className="dismiss" onClick={dismissError} aria-label="Dismiss error">
+          ×
+        </button>
+      </div>
       <p>
         <code>{error.code}</code> {error.message}
         {error.recoverable ? "" : " (not recoverable)"}
       </p>
+      <p className="muted small">Clears when your next command goes through, or when the session moves on.</p>
     </div>
   );
 }
