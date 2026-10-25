@@ -29,13 +29,20 @@ declare global {
 
 export type Vec3 = { x: number; y: number; z: number };
 
-/** Opens the app on its own mock-gateway session, enters emulated AR, and waits for the UI to settle in front of the head. */
-export async function enterAR(page: Page, session: string, input: InputMode = "hands"): Promise<void> {
+/**
+ * Opens the app on its own mock-gateway session, enters emulated AR, and waits for the UI to settle in front of the head.
+ * Every mock session starts without store_chat consent, so the app asks at start; unless `keepConsentPrompt`, this goes
+ * back to the main view without answering, as a test that isn't about consent would.
+ */
+export async function enterAR(page: Page, session: string, input: InputMode = "hands", { keepConsentPrompt = false } = {}): Promise<void> {
   await page.goto(`/headset/?session=${encodeURIComponent(session)}&input=${input}`);
   await page.waitForFunction(() => window.cadence?.store.getState().connection === "open");
   await page.getByRole("button", { name: "Enter", exact: true }).click();
   await page.waitForFunction(() => !!window.cadence.xrStore.getState().session);
   await page.waitForFunction(() => window.cadence.useRecenter.getState().at === null);
+  if (keepConsentPrompt) return;
+  await page.waitForFunction(() => window.cadence.useView.getState().view.kind === "consent");
+  await page.evaluate(() => window.cadence.useView.setState({ view: { kind: "main" } }));
 }
 
 export function remote(page: Page, method: string, params: Record<string, unknown>): Promise<unknown> {

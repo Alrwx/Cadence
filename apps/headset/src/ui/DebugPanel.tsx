@@ -37,7 +37,6 @@ export function DebugPanel() {
           label={`Rec ${SHORT[label]}`}
           width={0.14}
           height={0.045}
-          color="#335"
           disabled={recorder.label !== null}
           position={[-0.3 + i * 0.15, 0, 0]}
           onPress={() => startRecording(label)}

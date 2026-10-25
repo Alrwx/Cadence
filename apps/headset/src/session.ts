@@ -16,7 +16,7 @@ export const connection = new GatewayConnection({
     store.getState().applyEvent(event);
     if (event.type === "conversations") receiveConversations(event.data.items);
     if (event.type === "memories") receiveMemories(event.data.items);
-    if (event.type === "consent") useConsent.setState({ storeChat: event.data.storeChat });
+    if (event.type === "consent") useConsent.setState({ storeChat: event.data.storeChat, reported: true });
   },
   onStatus: (status) => store.getState().setConnection(status),
 });

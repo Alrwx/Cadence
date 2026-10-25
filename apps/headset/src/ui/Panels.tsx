@@ -14,17 +14,16 @@ import { MemoriesView } from "./MemoriesView.tsx";
 import { SavedPhrasesView } from "./SavedPhrasesView.tsx";
 import { SettingsPanel } from "./SettingsPanel.tsx";
 import { TextEntryView } from "./TextEntryView.tsx";
-import { notify, showView, useView } from "./views.ts";
+import { notify, showView, useConsentAtStart, useView } from "./views.ts";
 
 // Tilted back so the panel faces the eyes from below the line of sight.
 const PANEL_TILT = Math.atan2(layout.panelOffset[1], -layout.panelOffset[2]);
-const QUIET = "#3d4a5c";
-const ACTIVE = "#b07a1f";
 
 export function Panels() {
   const sessionState = useCadence((s) => s.state);
   const view = useView((s) => s.view);
   const error = useCadence((s) => s.lastError);
+  useConsentAtStart();
 
   useEffect(() => {
     if (error) notify(error.message, "error");
@@ -44,19 +43,19 @@ export function Panels() {
   return (
     <group position={layout.panelOffset} rotation={[PANEL_TILT, 0, 0]}>
       <StatusLine />
-      {showTopBar && <ListenerPrompt />}
+      {showTopBar && view.kind !== "consent" && <ListenerPrompt />}
       {/* Clear of Recenter and Conversations, and nothing takes its spot on the main view, so a dwell can't carry over. */}
       {showHome && (
-        <Button3D label={t("top.home")} width={0.16} height={0.045} color={QUIET} position={[-0.2, 0.27, 0]} onPress={() => showView({ kind: "main" })} />
+        <Button3D label={t("top.home")} width={0.16} height={0.045} position={[-0.2, 0.27, 0]} onPress={() => showView({ kind: "main" })} />
       )}
       {showTopBar && (
         <>
-          <Button3D label={t("top.recenter")} width={0.14} height={0.045} color={QUIET} position={[-0.4, 0.27, 0]} onPress={requestRecenter} />
+          <Button3D label={t("top.recenter")} width={0.14} height={0.045} position={[-0.4, 0.27, 0]} onPress={requestRecenter} />
           <Button3D
             label={t("top.conversations")}
             width={0.2}
             height={0.045}
-            color={view.kind === "conversations" && !view.tab ? ACTIVE : QUIET}
+            selected={view.kind === "conversations" && !view.tab}
             position={[0, 0.27, 0]}
             onPress={() => showView({ kind: "conversations" })}
           />
@@ -66,7 +65,7 @@ export function Panels() {
               label={t("memories.tab")}
               width={0.16}
               height={0.045}
-              color={view.tab === "memories" ? ACTIVE : QUIET}
+              selected={view.tab === "memories"}
               position={[0.2, 0.27, 0]}
               onPress={() => showView({ kind: "conversations", tab: "memories" })}
             />
@@ -75,7 +74,6 @@ export function Panels() {
             label={t("top.settings")}
             width={0.14}
             height={0.045}
-            color={QUIET}
             position={[0.4, 0.27, 0]}
             onPress={() => showView({ kind: "settings" })}
           />
@@ -95,8 +93,8 @@ function ListenerPrompt() {
       <Text position={[-0.12, 0, 0]} fontSize={0.02} anchorX="right" color="#ddd">
         {t("listener.prompt")}
       </Text>
-      <Button3D label={t("listener.place")} width={0.2} height={0.045} color="#2e6b7d" position={[0, 0, 0]} onPress={requestPlaceListener} />
-      <Button3D label={t("listener.skip")} width={0.12} height={0.045} color={QUIET} position={[0.18, 0, 0]} onPress={() => useListener.setState({ prompted: true })} />
+      <Button3D label={t("listener.place")} width={0.2} height={0.045} variant="primary" position={[0, 0, 0]} onPress={requestPlaceListener} />
+      <Button3D label={t("listener.skip")} width={0.12} height={0.045} position={[0.18, 0, 0]} onPress={() => useListener.setState({ prompted: true })} />
     </group>
   );
 }

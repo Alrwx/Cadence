@@ -16,10 +16,6 @@ const COLUMNS = 2;
 const PAGE_SIZE = 6;
 const PHRASE_WIDTH = 0.44;
 const ACTIONS_Y = -0.225;
-const TAB = "#5a4a2a";
-const ACTIVE = "#b07a1f";
-const PHRASE = "#8a6a2a";
-const ACTION = "#3d4a5c";
 
 export function SavedPhrasesView() {
   const groups = useCadence((s) => s.phraseGroups);
@@ -51,7 +47,6 @@ export function SavedPhrasesView() {
           key={item.id}
           label={item.text}
           width={PHRASE_WIDTH}
-          color={PHRASE}
           position={[((i % COLUMNS) - (COLUMNS - 1) / 2) * (PHRASE_WIDTH + 0.02), GRID_TOP - Math.floor(i / COLUMNS) * ROW, 0]}
           onPress={() => {
             if (editFirst) return startCompose(item.text);
@@ -62,16 +57,16 @@ export function SavedPhrasesView() {
       ))}
       {pages > 1 && (
         <>
-          <Button3D label={t("saved.prev")} width={0.1} color={ACTION} disabled={shownPage === 0} position={[-0.56, GRID_TOP - ROW, 0]} onPress={() => setPage(shownPage - 1)} />
-          <Button3D label={t("saved.more")} width={0.1} color={ACTION} disabled={shownPage === pages - 1} position={[0.56, GRID_TOP - ROW, 0]} onPress={() => setPage(shownPage + 1)} />
+          <Button3D label={t("saved.prev")} width={0.1} disabled={shownPage === 0} position={[-0.56, GRID_TOP - ROW, 0]} onPress={() => setPage(shownPage - 1)} />
+          <Button3D label={t("saved.more")} width={0.1} disabled={shownPage === pages - 1} position={[0.56, GRID_TOP - ROW, 0]} onPress={() => setPage(shownPage + 1)} />
         </>
       )}
       <group position={[0, ACTIONS_Y, 0]}>
-        <Button3D label={t("saved.back")} width={0.2} color={ACTION} position={[-0.15, 0, 0]} onPress={() => showView({ kind: "main" })} />
+        <Button3D label={t("saved.back")} width={0.2} position={[-0.15, 0, 0]} onPress={() => showView({ kind: "main" })} />
         <Button3D
           label={editFirst ? t("saved.pickToEdit") : t("saved.editFirst")}
           width={0.2}
-          color={editFirst ? ACTIVE : ACTION}
+          selected={editFirst}
           position={[0.15, 0, 0]}
           onPress={() => setEditFirst(!editFirst)}
         />
@@ -85,7 +80,7 @@ function GroupTabs({ groups, activeId, onOpen }: { groups: PhrasesGroup[]; activ
   return (
     <group position={[0, TABS_Y, 0]}>
       {groups.map((g, i) => (
-        <Button3D key={g.id} label={g.name} width={0.16} height={0.05} color={g.id === activeId ? ACTIVE : TAB} position={[x(i), 0, 0]} onPress={() => onOpen(g.id)} />
+        <Button3D key={g.id} label={g.name} width={0.16} height={0.05} selected={g.id === activeId} position={[x(i), 0, 0]} onPress={() => onOpen(g.id)} />
       ))}
     </group>
   );

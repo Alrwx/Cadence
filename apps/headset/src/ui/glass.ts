@@ -1,12 +1,20 @@
-// The glass look for buttons. WebXR can't sample the passthrough camera, so nothing is really refracted:
+// The glass look for buttons and panels. WebXR can't sample the passthrough camera, so nothing is really refracted:
 // a tinted, partly see-through body lets the room show through, and light on a curved rim, a sheen that slides
 // as the head moves, and a liquid level for dwell progress make it read as glass.
 import { Color, ShaderMaterial, Vector2, type IUniform } from "three";
 
-/** Body opacity: see-through enough to keep the room visible, dark enough for white text over a bright wall. */
-export const GLASS_OPACITY = 0.62;
+/** Body opacity: the user chose 0.4 so the room stays visible; the dark tint and text halo keep labels readable. */
+export const GLASS_OPACITY = 0.4;
 /** "Solid panels" in Settings, for users who find see-through buttons hard to read. */
 export const SOLID_OPACITY = 0.96;
+
+/** Neutral body tint for every button and surface. */
+export const GLASS_TINT = "#0c1211";
+/** The one accent: selected and on states, the primary action, dwell progress, status icons. */
+export const ACCENT = "#2dd4bf";
+/** Tint and rim of a second-press confirm ("Really delete?"). */
+export const DANGER = "#e11d48";
+export const DANGER_RIM = "#fb7185";
 
 // The lift and squish move only what's drawn: the mesh itself stays put, since it is also the pinch and dwell target.
 const vertexShader = /* glsl */ `
@@ -32,6 +40,8 @@ void main() {
 const fragmentShader = /* glsl */ `
 uniform vec3 uTint;
 uniform vec3 uLiquid;
+uniform vec3 uRing;
+uniform float uRingMix;
 uniform vec2 uSize;
 uniform float uRadius;
 uniform float uOpacity;
@@ -47,6 +57,7 @@ varying vec3 vUp;
 varying vec3 vNormal;
 
 const float BEVEL = 0.012;
+const float RING = 0.002;
 const vec3 LIGHT = normalize(vec3(-0.35, 1.0, 0.55));
 
 // Signed distance to a rounded rectangle (negative inside), and the outward direction to its nearest edge.
@@ -92,26 +103,32 @@ void main() {
   color = mix(color, uLiquid, liquid * 0.6);
   color += meniscus * 0.5 + sheen * 0.1 + fresnel * 0.3 + spec * 0.6 + rim * (0.2 + fresnel * 0.5);
 
-  float alpha = uOpacity + uHover * 0.12 + liquid * 0.2 + rim * 0.3 + spec * 0.4 + meniscus * 0.3;
+  // Selected, primary and danger buttons get a solid colored ring just inside the edge.
+  float ring = (1.0 - smoothstep(RING - aa, RING + aa, -d)) * uRingMix;
+  color = mix(color, uRing, ring);
+
+  float alpha = uOpacity + uHover * 0.12 + liquid * 0.2 + rim * 0.3 + spec * 0.4 + meniscus * 0.3 + ring;
   gl_FragColor = vec4(color, clamp(alpha, 0.0, 1.0) * mask);
   #include <colorspace_fragment>
 }
 `;
 
 export type GlassMaterial = ShaderMaterial & {
-  uniforms: Record<"uTint" | "uLiquid", IUniform<Color>> &
+  uniforms: Record<"uTint" | "uLiquid" | "uRing", IUniform<Color>> &
     Record<"uSize" | "uScale", IUniform<Vector2>> &
-    Record<"uRadius" | "uOpacity" | "uSheen" | "uHover" | "uFill" | "uTime" | "uLift", IUniform<number>>;
+    Record<"uRadius" | "uOpacity" | "uSheen" | "uHover" | "uFill" | "uTime" | "uLift" | "uRingMix", IUniform<number>>;
 };
 
-/** One material per button (its uniforms animate independently); three compiles the shader once for all of them. */
+/** One material per surface (its uniforms animate independently); three compiles the shader once for all of them. */
 export function createGlassMaterial(width: number, height: number, radius: number): GlassMaterial {
   return new ShaderMaterial({
     vertexShader,
     fragmentShader,
     uniforms: {
-      uTint: { value: new Color() },
-      uLiquid: { value: new Color("#7fd1ff") },
+      uTint: { value: new Color(GLASS_TINT) },
+      uLiquid: { value: new Color(ACCENT) },
+      uRing: { value: new Color(ACCENT) },
+      uRingMix: { value: 0 },
       uSize: { value: new Vector2(width, height) },
       uRadius: { value: radius },
       uOpacity: { value: GLASS_OPACITY },
@@ -128,3 +145,6 @@ export function createGlassMaterial(width: number, height: number, radius: numbe
     toneMapped: false,
   }) as GlassMaterial;
 }
+
+/** A raycast that never hits, for meshes drawn on or behind a button that must not take its pinches. */
+export const ignoreRays = () => {};

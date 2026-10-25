@@ -24,7 +24,7 @@ export function MainView() {
       {!listenerPlaced && <Replies />}
       <InstantRow />
       <group position={[0, SAVED_Y, 0]}>
-        <Button3D label={t("main.savedPhrases")} width={0.24} color="#8a6a2a" position={[-1.5 * SAVED_STEP, 0, 0]} onPress={() => showView({ kind: "saved" })} />
+        <Button3D label={t("main.savedPhrases")} width={0.24} position={[-1.5 * SAVED_STEP, 0, 0]} onPress={() => showView({ kind: "saved" })} />
         <BookmarkButton />
         <RememberButton />
         <ResetButton />
@@ -41,12 +41,11 @@ function InstantRow() {
           key={gesture}
           label={t(gesturePhrases[gesture].label)}
           width={0.16}
-          color="#2e7d4f"
           position={[(i - 1.5) * 0.18, 0, 0]}
           onPress={() => fireGesture(gesture)}
         />
       ))}
-      <Button3D label={t("main.typeMyOwn")} width={0.2} color="#7a4fa0" position={[1.5 * 0.18 + 0.02, 0, 0]} onPress={() => startCompose()} />
+      <Button3D label={t("main.typeMyOwn")} width={0.2} position={[1.5 * 0.18 + 0.02, 0, 0]} onPress={() => startCompose()} />
     </group>
   );
 }
@@ -62,7 +61,6 @@ function BookmarkButton() {
     <Button3D
       label={t("main.bookmark", { group: group?.name ?? "…" })}
       width={0.24}
-      color="#5a4a2a"
       position={[-0.5 * SAVED_STEP, 0, 0]}
       disabled={!group}
       onPress={() => {
@@ -98,7 +96,6 @@ function RememberButton() {
     <Button3D
       label={justSaved ? t("memories.undo") : t("memories.remember")}
       width={0.24}
-      color={justSaved ? "#a33a2e" : "#2e6b7d"}
       position={[0.5 * SAVED_STEP, 0, 0]}
       onPress={() => {
         if (justSaved) {
@@ -125,7 +122,7 @@ function ResetButton() {
     <Button3D
       label={confirming ? t("main.confirmReset") : t("main.reset")}
       width={0.24}
-      color={confirming ? "#a33a2e" : "#3d4a5c"}
+      variant={confirming ? "danger" : "glass"}
       position={[1.5 * SAVED_STEP, 0, 0]}
       onPress={() => {
         if (!confirming) return setConfirming(true);

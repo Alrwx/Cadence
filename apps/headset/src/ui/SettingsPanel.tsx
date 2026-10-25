@@ -15,8 +15,6 @@ const MODES: [InputMode, StringKey][] = [
   ["head", "settings.head"],
   ["both", "settings.both"],
 ];
-const ACTIVE = "#b07a1f";
-const IDLE = "#3d4a5c";
 const LABEL_X = -0.47;
 
 export function SettingsPanel({ onClose }: { onClose: () => void }) {
@@ -35,7 +33,7 @@ export function SettingsPanel({ onClose }: { onClose: () => void }) {
           key={m}
           label={t(label)}
           width={0.16}
-          color={m === mode ? ACTIVE : IDLE}
+          selected={m === mode}
           headSelectable={m !== "hands"}
           position={[-0.12 + i * 0.18, 0, 0]}
           onPress={() => useSettings.setState({ inputMode: m })}
@@ -49,7 +47,7 @@ export function SettingsPanel({ onClose }: { onClose: () => void }) {
           key={ms}
           label={t("settings.seconds", { n: ms / 1000 })}
           width={0.12}
-          color={ms === dwellMs ? ACTIVE : IDLE}
+          selected={ms === dwellMs}
           position={[-0.14 + i * 0.135, -row, 0]}
           onPress={() => useSettings.setState({ dwellMs: ms })}
         />
@@ -60,20 +58,20 @@ export function SettingsPanel({ onClose }: { onClose: () => void }) {
       <Button3D
         label={t("settings.glass")}
         width={0.12}
-        color={!solid ? ACTIVE : IDLE}
+        selected={!solid}
         position={[-0.14, -2 * row, 0]}
         onPress={() => useSettings.setState({ solidPanels: false })}
       />
       <Button3D
         label={t("settings.solid")}
         width={0.16}
-        color={solid ? ACTIVE : IDLE}
+        selected={solid}
         position={[0.01, -2 * row, 0]}
         onPress={() => useSettings.setState({ solidPanels: true })}
       />
       <MemoriesRow y={-3 * row} />
       <ListenerRow y={-4 * row} />
-      <Button3D label={t("settings.done")} width={0.2} color="#2b5d9c" position={[0, -5 * row, 0]} onPress={onClose} />
+      <Button3D label={t("settings.done")} width={0.2} position={[0, -5 * row, 0]} onPress={onClose} />
     </group>
   );
 }
@@ -97,14 +95,15 @@ function MemoriesRow({ y }: { y: number }) {
       <Button3D
         label={t("memories.on")}
         width={0.12}
-        color={storeChat ? ACTIVE : IDLE}
+        selected={storeChat}
         position={[-0.14, y, 0]}
         onPress={() => send("consent.set", { kind: "store_chat", granted: true })}
       />
       <Button3D
         label={confirming ? t("memories.confirmOff") : t("memories.off")}
         width={0.16}
-        color={!storeChat ? ACTIVE : confirming ? "#a33a2e" : IDLE}
+        selected={!storeChat}
+        variant={confirming ? "danger" : "glass"}
         position={[0.01, y, 0]}
         onPress={() => {
           if (!storeChat) return;
@@ -126,8 +125,8 @@ function ListenerRow({ y }: { y: number }) {
       <Text position={[LABEL_X, y, 0]} fontSize={layout.fontSize} anchorX="left" color="white">
         {t("listener.setting")}
       </Text>
-      <Button3D label={t("listener.placeShort")} width={0.12} color={placed ? ACTIVE : IDLE} position={[-0.14, y, 0]} onPress={requestPlaceListener} />
-      <Button3D label={t("listener.clear")} width={0.16} color={IDLE} disabled={!placed && !placing} position={[0.01, y, 0]} onPress={clearListener} />
+      <Button3D label={t("listener.placeShort")} width={0.12} selected={placed} position={[-0.14, y, 0]} onPress={requestPlaceListener} />
+      <Button3D label={t("listener.clear")} width={0.16} disabled={!placed && !placing} position={[0.01, y, 0]} onPress={clearListener} />
     </>
   );
 }

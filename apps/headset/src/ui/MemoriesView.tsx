@@ -12,7 +12,6 @@ const PAGE_SIZE = 4;
 // Two lines at most, so a long summary can't spill into the next row.
 const SUMMARY_CHARS = 110;
 const LABEL_X = -0.47;
-const IDLE = "#3d4a5c";
 
 export function MemoriesView() {
   const items = useMemories((s) => s.items);
@@ -41,7 +40,7 @@ export function MemoriesView() {
           <Button3D
             label={confirming === m.id ? t("memories.confirmDelete") : t("memories.delete")}
             width={0.14}
-            color={confirming === m.id ? "#a33a2e" : IDLE}
+            variant={confirming === m.id ? "danger" : "glass"}
             position={[0.37, 0, 0]}
             onPress={() => {
               if (confirming !== m.id) return setConfirming(m.id);
@@ -52,9 +51,9 @@ export function MemoriesView() {
         </group>
       ))}
       <group position={[0, -(0.9 + PAGE_SIZE) * row, 0]}>
-        <Button3D label={t("memories.prev")} width={0.1} color={IDLE} disabled={shown === 0} position={[-0.3, 0, 0]} onPress={() => setPage(shown - 1)} />
-        <Button3D label={t("memories.more")} width={0.1} color={IDLE} disabled={shown >= pages - 1} position={[-0.18, 0, 0]} onPress={() => setPage(shown + 1)} />
-        <Button3D label={t("memories.back")} width={0.2} color={IDLE} position={[0.05, 0, 0]} onPress={() => showView({ kind: "main" })} />
+        <Button3D label={t("memories.prev")} width={0.1} disabled={shown === 0} position={[-0.3, 0, 0]} onPress={() => setPage(shown - 1)} />
+        <Button3D label={t("memories.more")} width={0.1} disabled={shown >= pages - 1} position={[-0.18, 0, 0]} onPress={() => setPage(shown + 1)} />
+        <Button3D label={t("memories.back")} width={0.2} position={[0.05, 0, 0]} onPress={() => showView({ kind: "main" })} />
       </group>
     </group>
   );

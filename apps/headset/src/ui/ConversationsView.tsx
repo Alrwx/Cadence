@@ -12,7 +12,6 @@ import { showView } from "./views.ts";
 const PAGE_SIZE = 3;
 const SUMMARY_CHARS = 70;
 const LABEL_X = -0.47;
-const IDLE = "#3d4a5c";
 
 export function ConversationsView() {
   const items = useConversations((s) => s.items);
@@ -43,7 +42,7 @@ export function ConversationsView() {
         {t("conversations.saveAs")}
       </Text>
       {t("conversations.presets").split("|").map((preset, i) => (
-        <Button3D key={preset} label={preset} width={0.15} color="#2e6b7d" position={[-0.24 + i * 0.17, 0, 0]} onPress={() => save(preset)} />
+        <Button3D key={preset} label={preset} width={0.15} position={[-0.24 + i * 0.17, 0, 0]} onPress={() => save(preset)} />
       ))}
       <Text position={[LABEL_X, -0.7 * row, 0]} fontSize={0.018} anchorX="left" color="#ddd">
         {savedAs ? t("conversations.savedAs", { label: savedAs }) : items.length ? t("conversations.useAsContext") : t("conversations.empty")}
@@ -65,14 +64,14 @@ export function ConversationsView() {
             <Button3D
               label={isAttached ? t("conversations.attached") : t("conversations.attach")}
               width={0.16}
-              color={isAttached ? "#b07a1f" : IDLE}
+              selected={isAttached}
               position={[0.2, 0, 0]}
               onPress={() => send("conversation.attach", { conversationIds: toggleAttached(c.id) })}
             />
             <Button3D
               label={confirming === c.id ? t("conversations.confirmDelete") : t("conversations.delete")}
               width={0.14}
-              color={confirming === c.id ? "#a33a2e" : IDLE}
+              variant={confirming === c.id ? "danger" : "glass"}
               position={[0.37, 0, 0]}
               onPress={() => {
                 if (confirming !== c.id) return setConfirming(c.id);
@@ -84,9 +83,9 @@ export function ConversationsView() {
         );
       })}
       <group position={[0, -(1.6 + PAGE_SIZE) * row, 0]}>
-        <Button3D label={t("conversations.prev")} width={0.1} color={IDLE} disabled={shown === 0} position={[-0.3, 0, 0]} onPress={() => setPage(shown - 1)} />
-        <Button3D label={t("conversations.more")} width={0.1} color={IDLE} disabled={shown >= pages - 1} position={[-0.18, 0, 0]} onPress={() => setPage(shown + 1)} />
-        <Button3D label={t("conversations.back")} width={0.2} color={IDLE} position={[0.05, 0, 0]} onPress={() => showView({ kind: "main" })} />
+        <Button3D label={t("conversations.prev")} width={0.1} disabled={shown === 0} position={[-0.3, 0, 0]} onPress={() => setPage(shown - 1)} />
+        <Button3D label={t("conversations.more")} width={0.1} disabled={shown >= pages - 1} position={[-0.18, 0, 0]} onPress={() => setPage(shown + 1)} />
+        <Button3D label={t("conversations.back")} width={0.2} position={[0.05, 0, 0]} onPress={() => showView({ kind: "main" })} />
       </group>
     </group>
   );

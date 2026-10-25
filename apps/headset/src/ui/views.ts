@@ -1,12 +1,15 @@
 // Which panel the headset shows; the gateway's COMPOSING state overrides it with the compose keyboard.
+import { useEffect } from "react";
 import { create } from "zustand";
+import { useConsent } from "../consent.ts";
 import { send } from "../session.ts";
 
 export type View =
   | { kind: "main" }
   | { kind: "saved" }
   | { kind: "conversations"; tab?: "memories" }
-  | { kind: "consent" }
+  /** atStart: asked once the gateway first reports consent off, rather than from Remember this. */
+  | { kind: "consent"; atStart?: boolean }
   | { kind: "settings" };
 
 export interface Notice {
@@ -42,4 +45,16 @@ export function notify(text: string, tone: Notice["tone"] = "info"): void {
   setTimeout(() => {
     if (useView.getState().notice === notice) useView.setState({ notice: null });
   }, NOTICE_MS);
+}
+
+let consentChecked = false;
+
+/** Asks for store_chat consent once per page load, as soon as the gateway first reports it off. */
+export function useConsentAtStart(): void {
+  const reported = useConsent((s) => s.reported);
+  useEffect(() => {
+    if (!reported || consentChecked) return;
+    consentChecked = true;
+    if (!useConsent.getState().storeChat) showView({ kind: "consent", atStart: true });
+  }, [reported]);
 }
