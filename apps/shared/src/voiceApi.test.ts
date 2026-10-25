@@ -38,6 +38,21 @@ test("uploadVoice sends the sample, consent and session as multipart", async () 
   assert.equal(form.get("consentId"), "c_1");
   assert.equal(form.get("sessionId"), "demo");
   assert.equal((form.get("audio") as File).name, "sample.webm");
+  assert.equal(form.get("transcript"), null);
+});
+
+test("uploadVoice sends a transcript only when one was typed", async () => {
+  const calls: { url: string; init: RequestInit }[] = [];
+  const sample = new Blob([new Uint8Array([1])], { type: "audio/wav" });
+  const upload = (transcript: string) =>
+    uploadVoice(
+      { sessionId: "demo", consentId: "c_1", sample, fileName: "video.wav", transcript },
+      fakeFetch(201, { voiceId: "v_1" }, calls),
+    );
+  await upload("  Hello there.  ");
+  await upload("   ");
+  assert.equal((calls[0]!.init.body as FormData).get("transcript"), "Hello there.");
+  assert.equal((calls[1]!.init.body as FormData).get("transcript"), null);
 });
 
 test("gateway errors surface their code and message", async () => {

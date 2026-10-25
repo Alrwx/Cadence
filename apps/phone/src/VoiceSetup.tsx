@@ -1,15 +1,21 @@
-// Voice setup, one idea per screen: consent, record, listen back, then create. Lives inside a Sheet.
-import { createConsent, recordingFileName, sessionIdFromUrl, uploadVoice } from "@cadence/shared";
+// Voice setup, one idea per screen: consent, record (or pick a recording or video), listen back, then create.
+// Lives inside a Sheet.
+import { createConsent, recordingFileName, sessionIdFromUrl, uploadVoice, VIDEO_SAMPLE_SECONDS } from "@cadence/shared";
 import { t } from "@cadence/shared/i18n";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { LevelMeter } from "./LevelMeter.tsx";
 import { MAX_SAMPLE_SECONDS, startRecording, type Recording } from "./recorder.ts";
 import { Icon, Switch } from "./ui.tsx";
+import { extractVideoAudio } from "./videoAudio.ts";
 
 interface Sample {
   blob: Blob;
   fileName: string;
   label: string;
+  /** Only video samples offer a transcript field. */
+  fromVideo?: boolean;
+  /** Word-for-word transcript; blank lets the model service transcribe the sample. */
+  transcript?: string;
 }
 
 type Step =
@@ -60,7 +66,13 @@ export function VoiceSetup({ onClose }: { onClose: () => void }) {
   const create = async (consentId: string, sample: Sample) => {
     go({ kind: "creating" });
     try {
-      await uploadVoice({ sessionId, consentId, sample: sample.blob, fileName: sample.fileName });
+      await uploadVoice({
+        sessionId,
+        consentId,
+        sample: sample.blob,
+        fileName: sample.fileName,
+        transcript: sample.transcript,
+      });
       go({ kind: "done" });
     } catch (err) {
       go({ kind: "error", message: errorText(err), back: { kind: "review", consentId, sample } });
@@ -93,7 +105,7 @@ export function VoiceSetup({ onClose }: { onClose: () => void }) {
         {step.kind === "review" && (
           <ReviewStep
             sample={step.sample}
-            onUse={() => create(step.consentId, step.sample)}
+            onUse={(transcript) => create(step.consentId, { ...step.sample, transcript })}
             onAgain={() => go({ kind: "record", consentId: step.consentId }, "back")}
           />
         )}
@@ -207,7 +219,9 @@ function RecordStep({ onSample }: { onSample: (sample: Sample) => void }) {
   const [recording, setRecording] = useState<Recording | null>(null);
   const [elapsed, setElapsed] = useState(0);
   const [error, setError] = useState<string | null>(null);
+  const [processing, setProcessing] = useState(false);
   const fileInput = useRef<HTMLInputElement>(null);
+  const videoInput = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (!recording) return;
@@ -237,19 +251,45 @@ function RecordStep({ onSample }: { onSample: (sample: Sample) => void }) {
     if (file) onSample({ blob: file, fileName: file.name, label: t("voice.selected", { name: file.name }) });
   };
 
+  // Only the first ~30 s of the video's audio is uploaded: the video itself never leaves the phone.
+  const pickVideo = async (file: File | undefined) => {
+    if (!file) return;
+    setError(null);
+    setProcessing(true);
+    try {
+      const { wav, seconds } = await extractVideoAudio(file);
+      const fileName = `${file.name.replace(/\.[^.]*$/, "") || "video"}.wav`;
+      onSample({ blob: wav, fileName, label: t("voice.videoSelected", { name: file.name, seconds }), fromVideo: true });
+    } catch (err) {
+      setError(t("voice.videoError", { error: errorText(err) }));
+      setProcessing(false);
+    }
+  };
+
   return (
     <Step
       title={t("voice.recordTitle")}
       subtitle={t("voice.sampleIntro")}
       actions={
         // Hidden, not removed, while recording, so the record button doesn't move.
-        <button
-          className="btn btn-text"
-          style={{ visibility: recording ? "hidden" : "visible" }}
-          onClick={() => fileInput.current?.click()}
-        >
-          {t("voice.pickFile")}
-        </button>
+        <>
+          <button
+            className="btn btn-text"
+            style={{ visibility: recording ? "hidden" : "visible" }}
+            disabled={processing}
+            onClick={() => videoInput.current?.click()}
+          >
+            {t("voice.pickVideo")}
+          </button>
+          <button
+            className="btn btn-text"
+            style={{ visibility: recording ? "hidden" : "visible" }}
+            disabled={processing}
+            onClick={() => fileInput.current?.click()}
+          >
+            {t("voice.pickFile")}
+          </button>
+        </>
       }
     >
       <p className="card reading">{t("voice.readingText")}</p>
@@ -261,6 +301,7 @@ function RecordStep({ onSample }: { onSample: (sample: Sample) => void }) {
         <button
           className={`rec${recording ? " on" : ""}`}
           aria-label={recording ? t("voice.stop") : t("voice.record")}
+          disabled={processing}
           onClick={() => (recording ? recording.stop() : record())}
         >
           {recording && (
@@ -269,30 +310,55 @@ function RecordStep({ onSample }: { onSample: (sample: Sample) => void }) {
             </svg>
           )}
         </button>
-        <p className="muted small">{recording ? t("voice.meterHint") : t("voice.recordHint")}</p>
+        <p className="muted small" role="status">
+          {processing
+            ? t("voice.processingVideo", { seconds: VIDEO_SAMPLE_SECONDS })
+            : recording
+              ? t("voice.meterHint")
+              : t("voice.recordHint")}
+        </p>
       </div>
       {error && (
         <p className="notice" role="alert">
           {error}
         </p>
       )}
-      <input ref={fileInput} type="file" accept="audio/*,video/*" hidden onChange={(e) => pick(e.target.files?.[0])} />
+      <input ref={fileInput} type="file" accept="audio/*" hidden onChange={(e) => pick(e.target.files?.[0])} />
+      <input
+        ref={videoInput}
+        type="file"
+        accept="video/*"
+        hidden
+        onChange={(e) => {
+          void pickVideo(e.target.files?.[0]);
+          e.target.value = ""; // picking the same video again still fires onChange
+        }}
+      />
     </Step>
   );
 }
 
-function ReviewStep({ sample, onUse, onAgain }: { sample: Sample; onUse: () => void; onAgain: () => void }) {
+function ReviewStep({
+  sample,
+  onUse,
+  onAgain,
+}: {
+  sample: Sample;
+  onUse: (transcript: string) => void;
+  onAgain: () => void;
+}) {
+  const [transcript, setTranscript] = useState(sample.transcript ?? "");
   return (
     <Step
       title={t("voice.reviewTitle")}
       subtitle={sample.label}
       actions={
         <>
-          <button className="btn btn-primary" onClick={onUse}>
+          <button className="btn btn-primary" onClick={() => onUse(transcript)}>
             {t("voice.use")}
           </button>
           <button className="btn btn-text" onClick={onAgain}>
-            {t("voice.recordAgain")}
+            {sample.fromVideo ? t("voice.chooseAgain") : t("voice.recordAgain")}
           </button>
         </>
       }
@@ -300,6 +366,19 @@ function ReviewStep({ sample, onUse, onAgain }: { sample: Sample; onUse: () => v
       <div className="center">
         <Preview blob={sample.blob} />
       </div>
+      {sample.fromVideo && (
+        <label>
+          <span className="field-label">{t("voice.transcriptLabel")}</span>
+          <textarea
+            className="input"
+            rows={5}
+            value={transcript}
+            onChange={(e) => setTranscript(e.target.value)}
+            placeholder={t("voice.transcriptPlaceholder")}
+          />
+          <span className="muted small">{t("voice.transcriptHint", { seconds: VIDEO_SAMPLE_SECONDS })}</span>
+        </label>
+      )}
     </Step>
   );
 }
