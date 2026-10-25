@@ -191,6 +191,17 @@ export interface TranscriptPartialData {
   speaker: "other";
 }
 
+/** Which voice replies are spoken in; sent on connect and after any change. cloned says whether a cloned voice exists, so the toggle can be disabled without one. (gateway → headset, phone) */
+export interface VoiceData {
+  active: "cloned" | "default";
+  cloned: boolean;
+}
+
+/** Speak in the cloned voice or the generic built-in one (the robot-voice contrast in the demo). Answered with an error when no cloned voice exists. (phone or headset → gateway) */
+export interface VoiceUseData {
+  voice: "cloned" | "default";
+}
+
 export const EVENT_TYPES = [
   "audio.done",
   "audio.play",
@@ -222,6 +233,8 @@ export const EVENT_TYPES = [
   "suggestions",
   "transcript.final",
   "transcript.partial",
+  "voice",
+  "voice.use",
 ] as const;
 
 export type EventType = (typeof EVENT_TYPES)[number];
@@ -257,6 +270,8 @@ export interface EventDataMap {
   "suggestions": SuggestionsData;
   "transcript.final": TranscriptFinalData;
   "transcript.partial": TranscriptPartialData;
+  "voice": VoiceData;
+  "voice.use": VoiceUseData;
 }
 
 export interface Envelope<T extends EventType = EventType> {
