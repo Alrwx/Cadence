@@ -94,3 +94,14 @@ Append-only. One entry per decision: date, decision, why, who.
 **Decision:** `store.AddTurn` writes only the session, speaker and time; `turn.text` stays NULL whatever the consent. Conversation content reaches SQLite only as the summaries in `memory` and `saved_conversation`.
 **Why:** The headset asks "Save short summaries of what's said?" for `store_chat`, and §7 says the transcript behind a memory or saved conversation is never written to disk. Storing every turn's text under that consent would keep full transcripts the person never agreed to, and revoking wouldn't remove them. The `turn` rows still give the metrics their speaker and timing.
 **Who:** David (Dev 4)
+
+### 2026-10-25 – Camera spike passes on the Quest 3S: pointing at objects is a go
+**Decision:** Phase 0 of `docs/proposals/2026-10-25-pointing-at-objects.md` passes. Quest Browser reads a passthrough camera inside `immersive-ar`, and a crop taken 3 s into the session reached the mock gateway.
+- Quest 3S on Quest OS v2.9, Quest Browser `OculusBrowser/154.0.0.55.15` (Chrome 154).
+- Cameras: "camera 0, facing front", "camera 1, facing back", "camera 2, facing back". The run used camera 1; the label doesn't say which side it's on.
+- Step 2: camera 1 opened at 1280×960, 30 fps.
+- Inside AR (8 s): the page reported 719 new frames (89.7 fps). That's the 90 Hz render loop, not the camera: the spike counts `video.currentTime` changes, which a live stream advances every frame. Camera fps inside AR isn't measured.
+- Crop: 512×384 JPEG at quality 0.8, 19.6–28.8 KB, uploaded with status 200.
+- A Gatorade bottle looked at straight on came out roughly centered in the crop.
+**Why:** This was the go/no-go for the proposal. The centered bottle is also the proof that frames kept arriving in AR, since the crop shows what the user turned to after entering it, and it means the center crop works for head-gaze with camera 1. The report's `arError` ("There is already an active, immersive XRSession") came from pressing 3 while the first session was running, and its `openError` and `uploadError` from earlier presses; the page keeps every error it sees.
+**Who:** David (Dev 1)

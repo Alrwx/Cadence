@@ -31,7 +31,7 @@ Full history of what was done: [log.md](log.md).
 - [ ] **Robot voice toggle and "Delete my voice"** on the phone, per `docs/proposals/2026-10-24-robot-voice-toggle.md`. The gateway side (`voice.use`, `voice`, `DELETE /api/voices`) is done; this is demo step 6.
 - [ ] Real-phone test: install mkcert, `make certs`, `make dev-mock`; iOS Safari + Android Chrome: captions, ring, clip after Start, reconnect after restart, voice recording, phrase management
 - [ ] Full voice setup against the real gateway + model service on the demo hardware
-- [ ] Run the camera spike on the Quest 3S (steps in `docs/proposals/2026-10-25-pointing-at-objects.md`) and record the result in `docs/decisions.md`
+- [x] Run the camera spike on the Quest 3S (steps in `docs/proposals/2026-10-25-pointing-at-objects.md`) and record the result in `docs/decisions.md`
 - [ ] If the spike passes: test-bench "Look at" card, mock `POST /api/look`, `lookApi.ts` with tests
 - [ ] `voiceApi.ts` points to `docs/proposals/2026-10-24-voice-upload-endpoints.md`, which isn't in the repo; commit it or fix the comment
 - [ ] Group chat: phone tests (no `make test-phone`), who sets up ESLint, Dev 1 moving headset strings to `@cadence/shared/i18n`

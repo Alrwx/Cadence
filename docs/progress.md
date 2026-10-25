@@ -13,7 +13,7 @@ What has landed on `main` (PRs #1–#29, 2026-10-24 to 2026-10-25), what's still
 | M2 Vertical slice | Done: phone mic → STT → `/suggest` → headset → `audio.play` (#10, #18). |
 | M3 Fast path | Mostly done: speculation, instant gestures, saved phrases, head dwell, voice sample recording, consent, "I'm answering" ring. Open: phone voice toggle and "Delete my voice" UI (see §4). |
 | M4 Demo-ready | Not started: needs the demo Mac, hotspot rehearsal 3×, backup video. |
-| M5 Stretch | Saved conversations and quick memories are done end to end. Pointing at objects is at Phase 0 (spike page merged, not yet run on a Quest). |
+| M5 Stretch | Saved conversations and quick memories are done end to end. Pointing at objects passed Phase 0 (camera spike on a Quest 3S, 2026-10-25); Phase 1 contracts are next. |
 
 ---
 
@@ -59,7 +59,7 @@ What has landed on `main` (PRs #1–#29, 2026-10-24 to 2026-10-25), what's still
 Added since the core set: quick memories and `store_chat` events, saved conversations, `conversation.reset`, `listener.say`, `voice.use` / `voice`. All additive; each has an example and is parsed in TS and Go.
 
 ### Docs
-Dev 2 plan/log, Dev 3 and Dev 4 status + handoff, `latency.md`, decision log (16 entries), proposals for phrase management, robot-voice toggle, shared-connection stale socket, and pointing at objects.
+Dev 2 plan/log, Dev 3 and Dev 4 status + handoff, `latency.md`, decision log (17 entries), proposals for phrase management, robot-voice toggle, shared-connection stale socket, and pointing at objects.
 
 ---
 
@@ -94,7 +94,7 @@ Dev 2 plan/log, Dev 3 and Dev 4 status + handoff, `latency.md`, decision log (16
 - [ ] Update `docs/dev4.md` (last updated at `187274d`; the P0 consent/voice items there are now done) and `docs/dev2/plan.md` so they don't contradict this file.
 
 ### P2: pointing at objects (stretch, plan in `docs/proposals/2026-10-25-pointing-at-objects.md`)
-- [ ] **Phase 0: run the camera spike on the Quest 3S** and record the result in `decisions.md` (Quest OS, browser version, camera labels, frames inside AR). Go/no-go for everything below. Owner: Dev 1 or Dev 2.
+- [x] **Phase 0: run the camera spike on the Quest 3S** and record the result in `decisions.md` (Quest OS, browser version, camera labels, frames inside AR). Go/no-go for everything below. Owner: Dev 1 or Dev 2. Passed 2026-10-25.
 - [ ] Phase 1 contracts: `POST /api/look`, `look.result`, model-service `POST /look`, `target` on `/suggest`, `Looked` state-machine input. Owner: Dev 4.
 - [ ] Phase 2 builds: `/look` and `target` prompt + mock + latency numbers (Dev 3); `/api/look`, target lifetime, metrics (Dev 4); dwell-on-empty-space trigger, "What's this?" button, label and settings toggle (Dev 1); test-bench "Look at" card, mock `/api/look`, `lookApi.ts` (Dev 2).
 - [ ] Phase 3: integration on the hotspot and a new step in `demo-script.md`.

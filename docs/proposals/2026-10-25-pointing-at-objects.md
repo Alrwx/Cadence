@@ -142,3 +142,4 @@ If the spike fails on the Quest 3S:
 - The trigger: dwell on empty space, a button, a controller trigger, or all three? (Proposed: all three, behind the one "Look to suggest" toggle.)
 - Should a look also work while the user is choosing, or only while listening? (Proposed: both, replacing the current replies.)
 - Does `target` stay for the next spoken turn (30 s), or only for the look turn? (Proposed: 30 s.)
+- How does a look pick one object on a cluttered table? At 1–2 m the 40% center crop takes in much of a table. (Proposed: crop tighter around the center, which the spike's centered result allows; ask Gemma for up to 3 objects nearest the center and show them as choices, so `look.result` carries a list; if none is right, "Point at it" freezes the full frame as a still panel, the user dwells or taps on the object, and the crop centers there. A point on the still needs no camera field of view or offset, so it could replace the controller-ray projection.)
