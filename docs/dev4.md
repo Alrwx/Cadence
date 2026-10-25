@@ -1,6 +1,6 @@
 # Dev 4 status and handoff
 
-Owner: Dev 4 (gateway, data, consent, integration). Scope is in `AGENTS(GH).md` §7. Last updated 2026-10-24, at main `187274d` (PRs #8, #9, #10 merged).
+Owner: Dev 4 (gateway, data, consent, integration). Scope is in `AGENTS(GH).md` §7. Last updated 2026-10-25, at main `cbdb40d` (PRs #1–#29 merged). Cross-team picture: `docs/progress.md`.
 
 Read this before working on `services/gateway`, `packages/protocol`, or the root `Makefile`. Agents: follow `AGENTS(GH).md` §8 too. This file only covers what's specific to the gateway right now.
 
@@ -56,14 +56,12 @@ Read this before working on `services/gateway`, `packages/protocol`, or the root
 ## Not done (priority order)
 
 ### P0: blocks the demo
-- [ ] **`POST /api/consent` and `POST /api/voices` in the real gateway.**
-  - The phone's voice-setup screen (PR #8, `apps/shared/src/voiceApi.ts`) calls them, and today only the mock gateway (`mocks/mock-gateway/src/server.ts`) has them.
-  - This is demo step 1 (clone a voice). Spec: [Next task](#next-task-consent--voice-upload) below.
-- [ ] **Use the person's current voice instead of the hard-coded one.**
-  - `orchestrator.go` still uses the constant `defaultVoiceID = "default"` and a fixed `personID` (see its `TODO(Dev 4)`).
-  - After a voice upload, `o.voiceID` must switch to the new voice. Each `voiceID` is a separate clip-cache key, so the new voice needs its own warm-up.
-- [ ] **Re-synthesize saved and instant phrases when the voice changes.** This is mostly `warmClips` run against the new voice, followed by a fresh `phrases` list, since `audioReady` depends on the voice.
-- [x] **Robot-voice contrast (demo step 6), gateway side.** `voice.use` / `voice` events; `orchestrator/voice.go` keeps the cloned voice apart from the "use default" choice. A `/tts` 404 for the cloned voice falls back to `"default"` (`loseVoice`). The phone toggle is proposed in `docs/proposals/2026-10-24-robot-voice-toggle.md` (Dev 2).
+- [x] **`POST /api/consent` and `POST /api/voices` in the real gateway** (PR #13). Migration 003 adds the consent details; the model client has `CreateVoice`; uploads are capped at 25 MB (`413`), an unknown or revoked consent gets `403 no_consent`, and model-service failures give `503 models_unavailable` or `502 model_error`. Verified against the real model service on the 3080 (webm/opus sample, voiceId in 355 ms).
+- [x] **The person's current voice is used** instead of the hard-coded one. The orchestrator reads the voice through a mutex-guarded getter (`updateVoice`), loads the newest unrevoked voice on startup, and falls back to `"default"`.
+- [x] **Saved and instant phrases are re-synthesized when the voice changes.** `warmClips` runs against the new voice and a fresh `phrases` list follows.
+- [x] **Robot-voice contrast (demo step 6), gateway side.** `voice.use` / `voice` events; `orchestrator/voice.go` keeps the cloned voice apart from the "use default" choice. A `/tts` 404 for the cloned voice falls back to `"default"` (`loseVoice`).
+- [ ] **Phone/headset UI for the voice toggle and "Delete my voice"** is still only a proposal (`docs/proposals/2026-10-24-robot-voice-toggle.md`, Dev 2). Without it, demo step 6 can't be done from the apps.
+- [ ] **Hotspot rehearsal 3× and a backup video (M4).** Both need the demo Mac.
 
 ### P1: M3/M4 polish
 - [x] **Revoking consent deletes everything (§2):** `DELETE /api/voices` (`voices.Handler.Revoke`) revokes the consents, then deletes the model service's copy, the `phrase_clip` rows and files, and the `voice_profile` rows, in an order that a retry can finish (see `store/voices.go` and `docs/decisions.md`). The phone's "Delete my voice" is proposed in `docs/proposals/2026-10-24-robot-voice-toggle.md`. Revoking `store_chat` (memories) is separate and not done here.
@@ -82,19 +80,23 @@ Read this before working on `services/gateway`, `packages/protocol`, or the root
   - Read them with `GET /api/metrics/summary[?since=<unix ms>]`: count, p50, p95 and max per name (detail `*`) and per (name, detail).
 - [x] **`session` / `turn` rows.** A `session` row is created (or reopened) on connect and gets `ended_at` when its last socket closes (`hub.DisconnectHandler`). A `turn` row is written for each final that starts a turn (`other`) and each reply sent to the phone (`user`). `turn.text` is always NULL, even with `store_chat` (see `docs/decisions.md`, 2026-10-25).
 - [ ] **Error routing.** `sendError` always targets the headset. That's fine for phrase and suggestion errors; voice-upload errors are HTTP responses, so they don't go through it.
-- [ ] **Hotspot rehearsal 3× and a backup video (M4).** Both need the demo Mac.
+- [ ] **`warmClips` sends `/tts` one phrase at a time** (about 18 s for 10 phrases on the 3080 after a voice switch). Send up to 4 at once so the model service batches them.
+- [ ] **Pass the model service's `400 detail`** (for example "needs at least 3 seconds of speech") to the phone as `400 bad_request` instead of a generic `502 model_error`.
 
 ### P2: stretch (M5)
 - [x] Saved conversations: `conversation.save/attach/delete` (schemas exist), `/summarize`, and attached summaries passed to `/suggest`. Needs `store_chat`. Store only the label and summary, never the transcript.
-- [x] Quick memories: a rolling 60 s transcript in memory, then `memory.save` → `/summarize` → passed to `/suggest`, plus `consent.set` / `consent` for `store_chat`.
+- [x] Quick memories: a rolling 60 s transcript in memory, then `memory.save` → `/summarize` → passed to `/suggest`, plus `consent.set` / `consent` for `store_chat` (PR #22, migration 004; revoking `store_chat` deletes memories and saved conversations).
+- [x] `conversation.reset` (PR #28): clears history and speculation, detaches attached conversations, drops pending replies.
+- [x] `listener.say` (PR #21): dev-tool event to type what the listener said, used by the phone test bench.
+- [ ] Pointing at objects: `POST /api/look`, `look.result`, the `Looked` state input, and `target` passed to `/suggest`. Blocked on the camera spike; plan in `docs/proposals/2026-10-25-pointing-at-objects.md`.
 
-### Cross-team items found while checking
-- **Dev 3:** the model service's `/voices` has `transcript` as a **required** form field (`services/models/app/main.py`). The contract in §6.2 says `transcript?` is optional, and the phone doesn't send a transcript. Either Dev 3 makes it optional (the service then transcribes the sample with STT), or the gateway would have to send a transcript it doesn't have. **Option 1 is the right fix.**
+### Cross-team items
+- **Resolved:** `/voices` `transcript` is now optional in the model service (Dev 3, PR #18).
 - **Missing doc:** `apps/shared/src/voiceApi.ts` points to `docs/proposals/2026-10-24-voice-upload-endpoints.md`, which isn't in the repo. Whoever has it should commit it, or the comment should point here.
 
 ---
 
-## Next task: consent + voice upload
+## Consent + voice upload (implemented in PR #13; kept as the contract reference)
 
 **Contract.** The phone already implements this (`apps/shared/src/voiceApi.ts`) and the mock gateway is the reference behavior. Match the mock's status codes and JSON error shape `{ code, message }`.
 
@@ -103,7 +105,7 @@ Read this before working on `services/gateway`, `packages/protocol`, or the root
 | `POST /api/consent` | JSON `{ sessionId, kind: "voice_clone", voiceOwner, statement }` (all non-empty strings) | `201 { consentId }` | `400 bad_request` |
 | `POST /api/voices` | `multipart/form-data`: `audio` (file), `consentId`, `sessionId`; max 25 MB | `201 { voiceId }` | `400 bad_request`, `403 no_consent` (unknown or revoked consent), `413 too_large`, `502`/`503` if the model service fails |
 
-**Implementation plan:**
+**Implementation plan (as built):**
 1. **Migration `003_consent_details.sql`:** add `voice_owner TEXT` and `statement TEXT` to `consent`. `statement` is the locale key of the consent text that was shown. Never edit 001 or 002.
 2. **Store functions:**
    - `CreateConsent(person, kind, owner, statement) (id)`
