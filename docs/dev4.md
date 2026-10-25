@@ -74,8 +74,14 @@ Read this before working on `services/gateway`, `packages/protocol`, or the root
   - debounce partials (~400 ms with no new words)
   - call `/suggest` on the partial transcript
   - cancel the call if the transcript changes
-- [ ] **Metrics.** The `metric` table exists but nothing writes to it. Log `/suggest` ms, `/tts` ms, selection → play latency, and selection type. Metrics only, never content. Needed for `docs/latency.md` and M4.
-- [ ] **`session` / `turn` rows.** Not written today. `turn.text` must stay NULL unless `store_chat` consent exists.
+- [x] **Metrics** (`orchestrator/metrics.go`, `store/metrics.go`). Rows in `metric`, never content:
+  - `suggest`: `/suggest` ms; detail `ok` / `error` / `timeout` / `cancelled` / `empty`
+  - `tts`: `/tts` ms; detail is why the clip was made: `suggestion` / `instant` / `saved` / `typed` / `warm`, with `:error` on failure
+  - `final_to_suggestions`: STT final → `suggestions` sent
+  - `select_to_play`: selection → `audio.play` sent; detail `<source>:cached` or `<source>:synthesized` (the cache-hit flag)
+  - `selection`: a count (no value); detail is the source
+  - Read them with `GET /api/metrics/summary[?since=<unix ms>]`: count, p50, p95 and max per name (detail `*`) and per (name, detail).
+- [x] **`session` / `turn` rows.** A `session` row is created (or reopened) on connect and gets `ended_at` when its last socket closes (`hub.DisconnectHandler`). A `turn` row is written for each final that starts a turn (`other`) and each reply sent to the phone (`user`). `store.AddTurn` checks `store_chat` consent itself, at write time, so `turn.text` is NULL without it.
 - [ ] **Error routing.** `sendError` always targets the headset. That's fine for phrase and suggestion errors; voice-upload errors are HTTP responses, so they don't go through it.
 - [ ] **Hotspot rehearsal 3× and a backup video (M4).** Both need the demo Mac.
 
@@ -139,6 +145,7 @@ Read this before working on `services/gateway`, `packages/protocol`, or the root
 - **Every state change goes through the machine:** `apply`, `beginTurn` or `finishSuggesting`. Async results must check that `turnID` is still current before acting (see `finishSuggesting` and `prepareSuggestion`).
 - **Model-service failures** send a recoverable `error` and leave instant phrases and typing working. Never block a WebSocket read loop on a model call; use a goroutine, as `suggest` and `prepareClip` do.
 - **No conversation text in SQLite without `store_chat` consent.** Metrics may always be stored; content may not. `audit_log` is the exception, since it's the safety record (§2).
+- **Metric, session and turn writes go through `o.record` / `o.recordTurn`**, which queue them for one writer goroutine. Never write them inline on the event path. A full queue drops the row (logged) rather than blocking. Tests call `o.writer.flush()` before reading the tables.
 - **The model service binds to 127.0.0.1.** Only the gateway is reachable from the network.
 - **Protocol changes** start in `packages/protocol/schema/*.schema.json`. Then run `pnpm protocol:gen` and add an example. Fields are additive and optional; never rename.
 - **Commits** say what changed and why, in plain words. No AI attribution trailers.

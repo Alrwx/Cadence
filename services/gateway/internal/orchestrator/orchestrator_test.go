@@ -130,7 +130,9 @@ func newTestOrchestrator(t *testing.T, fm *fakeModels) *Orchestrator {
 	}
 	ms := httptest.NewServer(fm)
 	t.Cleanup(ms.Close)
-	return New(st, models.New(ms.URL), cc, "p1", store.DefaultLocale)
+	o := New(st, models.New(ms.URL), cc, "p1", store.DefaultLocale)
+	t.Cleanup(o.Close) // cleanups run last-in first-out, so this runs before st.Close
+	return o
 }
 
 // client is one side (headset or phone) of a test session.

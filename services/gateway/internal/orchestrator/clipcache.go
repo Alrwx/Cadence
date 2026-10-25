@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"log/slog"
+	"time"
 )
 
 // flight is one in-progress synthesis that concurrent callers for the same key wait on.
@@ -26,6 +27,7 @@ func (o *Orchestrator) clipFor(ctx context.Context, text, locale string) (string
 	if ok && o.clips.Has(id) {
 		return id, nil
 	}
+	markWaited(ctx)
 
 	key := voice + "\x00" + locale + "\x00" + text
 	o.flightMu.Lock()
@@ -53,7 +55,14 @@ func (o *Orchestrator) clipFor(ctx context.Context, text, locale string) (string
 
 // synthesize calls /tts and records the clip. existingID reuses a DB row whose file went missing.
 func (o *Orchestrator) synthesize(ctx context.Context, voice, locale, text, existingID string) (string, error) {
+	sessionID, purpose := ttsPurpose(ctx)
+	start := time.Now()
 	wav, err := o.models.TTS(ctx, voice, text, locale)
+	if err != nil {
+		o.recordSince(sessionID, metricTTS, start, purpose+":error")
+	} else {
+		o.recordSince(sessionID, metricTTS, start, purpose)
+	}
 	if err != nil {
 		return "", fmt.Errorf("tts: %w", err)
 	}
