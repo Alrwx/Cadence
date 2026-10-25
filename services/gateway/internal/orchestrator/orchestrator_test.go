@@ -18,6 +18,7 @@ import (
 	"github.com/Alrwx/Cadence/services/gateway/internal/clips"
 	"github.com/Alrwx/Cadence/services/gateway/internal/hub"
 	"github.com/Alrwx/Cadence/services/gateway/internal/models"
+	"github.com/Alrwx/Cadence/services/gateway/internal/session"
 	"github.com/Alrwx/Cadence/services/gateway/internal/store"
 )
 
@@ -214,6 +215,7 @@ func newTestOrchestrator(t *testing.T, fm *fakeModels) *Orchestrator {
 type client struct {
 	t    *testing.T
 	conn *websocket.Conn
+	url  string // the test server, for dialing this role again
 }
 
 func dial(t *testing.T, url, role string) *client {
@@ -225,7 +227,7 @@ func dial(t *testing.T, url, role string) *client {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { conn.CloseNow() })
-	return &client{t: t, conn: conn}
+	return &client{t: t, conn: conn, url: url}
 }
 
 func (c *client) send(eventType string, data any) {
@@ -813,5 +815,90 @@ func TestListenerSayOffWithoutDevTools(t *testing.T) {
 	}
 	if n := len(fm.suggestRequests()); n != 0 {
 		t.Fatalf("typed line reached /suggest %d times with dev tools off", n)
+	}
+}
+
+// TestTypedReplyIsSpoken: "Type my own" opens the keyboard (COMPOSING), and Speak plays the typed text on the phone.
+func TestTypedReplyIsSpoken(t *testing.T) {
+	_, headset, phone := pairedSession(t, &fakeModels{})
+
+	headset.send(protocol.TypeComposeStart, protocol.ComposeStartData{})
+	headset.expectState("COMPOSING")
+	headset.send(protocol.TypeComposeSubmit, protocol.ComposeSubmitData{Text: "I would like some water"})
+	headset.expectState("SPEAKING")
+	var play protocol.AudioPlayData
+	phone.expect(protocol.TypeAudioPlay, &play, nil)
+	if play.Text != "I would like some water" || play.Source != "typed" {
+		t.Fatalf("audio.play = %+v, want the typed text", play)
+	}
+	phone.send(protocol.TypeAudioDone, protocol.AudioDoneData{ClipID: play.ClipID})
+	headset.expectState("LISTENING")
+}
+
+// TestSpeakWithoutPhoneSaysWhy: the phone is the only speaker, so with its page closed (after an earlier Start)
+// a typed reply can't play. The headset is told why, keeps its keyboard, and can speak once the phone is back,
+// instead of the session sitting in SPEAKING waiting for an audio.done that never comes.
+func TestSpeakWithoutPhoneSaysWhy(t *testing.T) {
+	o, headset, phone := pairedSession(t, &fakeModels{})
+	srvURL := phone.url
+	phone.conn.CloseNow()
+	waitFor(t, func() bool { return !o.phoneConnected("s1") })
+
+	headset.send(protocol.TypeComposeStart, protocol.ComposeStartData{})
+	headset.expectState("COMPOSING")
+	headset.send(protocol.TypeComposeSubmit, protocol.ComposeSubmitData{Text: "I would like some water"})
+	var errData protocol.ErrorData
+	headset.expect(protocol.TypeError, &errData, nil)
+	if errData.Code != "phone_offline" || !errData.Recoverable {
+		t.Fatalf("error = %+v, want recoverable phone_offline", errData)
+	}
+	if st := o.stateOf(o.session("s1")); st != session.Composing {
+		t.Fatalf("state after Speak with no phone = %s, want COMPOSING (keyboard kept)", st)
+	}
+
+	phone = dial(t, srvURL, "phone")
+	phone.expectState("COMPOSING")
+	headset.send(protocol.TypeComposeSubmit, protocol.ComposeSubmitData{Text: "I would like some water"})
+	var play protocol.AudioPlayData
+	phone.expect(protocol.TypeAudioPlay, &play, nil)
+	if play.Text != "I would like some water" {
+		t.Fatalf("audio.play = %+v after the phone came back", play)
+	}
+}
+
+// TestPhoneLeavingDuringSynthesisReleasesSpeaking: a phone that closes while the clip is being made can't play it,
+// so the session goes back to LISTENING and the headset is told, rather than staying in SPEAKING.
+func TestPhoneLeavingDuringSynthesisReleasesSpeaking(t *testing.T) {
+	o, headset, phone := pairedSession(t, &fakeModels{delay: 300 * time.Millisecond})
+
+	headset.send(protocol.TypeComposeSubmit, protocol.ComposeSubmitData{Text: "Something nobody has said yet"})
+	headset.expectState("SPEAKING")
+	phone.conn.CloseNow()
+	var errData protocol.ErrorData
+	headset.expect(protocol.TypeError, &errData, nil)
+	if errData.Code != "phone_offline" {
+		t.Fatalf("error = %+v, want phone_offline", errData)
+	}
+	headset.expectState("LISTENING")
+	if st := o.stateOf(o.session("s1")); st != session.Listening {
+		t.Fatalf("state = %s, want LISTENING", st)
+	}
+}
+
+func (o *Orchestrator) phoneConnected(sessionID string) bool {
+	ss := o.session(sessionID)
+	ss.mu.Lock()
+	defer ss.mu.Unlock()
+	return ss.hub != nil && ss.hub.Connected(hub.Phone)
+}
+
+func waitFor(t *testing.T, cond func() bool) {
+	t.Helper()
+	deadline := time.Now().Add(5 * time.Second)
+	for !cond() {
+		if time.Now().After(deadline) {
+			t.Fatal("condition not met within 5s")
+		}
+		time.Sleep(10 * time.Millisecond)
 	}
 }

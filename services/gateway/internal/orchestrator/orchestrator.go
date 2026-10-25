@@ -190,14 +190,22 @@ func (o *Orchestrator) OnEvent(s *hub.Session, from hub.Role, env protocol.Envel
 	}
 }
 
+const phoneOfflineMessage = "The phone isn't connected, so nothing can play. Open Cadence on the phone and tap Start."
+
 var instantText = map[string]string{
 	"yes": "Yes", "no": "No", "wait": "Give me a second", "hello": "Hello", "laugh": "Ha ha",
 }
 
 // speak gets a clip for text (from the cache, or synthesized now), logs it, and tells the phone to play it.
+// The phone is the only speaker: with no phone connected the selection is refused (the headset keeps its
+// keyboard or replies), since an audio.play nobody receives would leave the session in SPEAKING for good.
 func (o *Orchestrator) speak(ctx context.Context, s *hub.Session, ss *sessionState, text, source, locale string) {
 	if text == "" {
 		o.sendError(ctx, s, "unknown_phrase", "Nothing to say for that selection.")
+		return
+	}
+	if !s.Connected(hub.Phone) {
+		o.sendError(ctx, s, "phone_offline", phoneOfflineMessage)
 		return
 	}
 	selectedAt := time.Now()
@@ -210,6 +218,11 @@ func (o *Orchestrator) speak(ctx context.Context, s *hub.Session, ss *sessionSta
 	if err != nil {
 		slog.Error("tts", "session", s.ID, "err", err)
 		o.sendError(ctx, s, "tts_failed", "Couldn't make that audio. Instant phrases and typing still work.")
+		o.apply(ctx, s, ss, session.ClipDone)
+		return
+	}
+	if !s.Connected(hub.Phone) { // closed while the clip was being made
+		o.sendError(ctx, s, "phone_offline", phoneOfflineMessage)
 		o.apply(ctx, s, ss, session.ClipDone)
 		return
 	}
