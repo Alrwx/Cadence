@@ -40,3 +40,9 @@ test("deleting takes a second press", async ({ page }) => {
   await expect.poll(() => sentData(page, "conversation.delete")).toEqual([{ conversationId: "cv_lee" }]);
   await expect.poll(async () => (await labels(page)).includes("Attach")).toBe(false);
 });
+
+test("Main menu in the top bar leads back home", async ({ page }) => {
+  await lookAt(page, "Main menu");
+  await expect.poll(async () => (await labels(page)).includes("Saved phrases")).toBe(true);
+  expect(await labels(page)).not.toContain("Main menu");
+});
