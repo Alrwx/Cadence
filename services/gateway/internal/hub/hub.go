@@ -58,6 +58,13 @@ type Session struct {
 	clients map[Role]*websocket.Conn
 }
 
+// Connected reports whether a client with the given role has a socket open.
+func (s *Session) Connected(role Role) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.clients[role] != nil
+}
+
 // Send writes one event to the client with the given role, if connected.
 func (s *Session) Send(ctx context.Context, role Role, eventType, turnID string, data any) error {
 	s.mu.Lock()
