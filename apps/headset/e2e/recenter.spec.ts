@@ -8,6 +8,7 @@ test("Recenter moves the panels in front of a reclined user after a countdown", 
   await remote(page, "look_at", { device: "headset", target: { x: 0, y: 2.9, z: 0.2 } });
   expect(await angleFromGaze(page, "Yes")).toBeGreaterThan(60);
 
+  await pinch(page, "More");
   await pinch(page, "Recenter");
   await page.waitForTimeout(1000);
   expect(await angleFromGaze(page, "Yes"), "still counting down").toBeGreaterThan(60);

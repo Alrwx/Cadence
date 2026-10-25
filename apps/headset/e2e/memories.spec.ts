@@ -20,15 +20,16 @@ async function hearSomething(page: Page) {
 }
 
 async function allowAndRemember(page: Page) {
+  await lookAt(page, "More");
   await lookAt(page, "Remember this");
   await lookAt(page, "Allow and remember");
 }
 
-/** Waits until the Conversations tab is gone: both tabs have Delete and Back buttons. */
+/** Waits for the view's Back, so label checks don't run against the main view. */
 async function openMemories(page: Page) {
-  await lookAt(page, "Conversations");
+  await lookAt(page, "More");
   await lookAt(page, "Memories");
-  await expect.poll(async () => (await labels(page)).includes("Attach")).toBe(false);
+  await targetCenter(page, "Back");
 }
 
 test("without consent, Remember this asks first, and allowing sends the consent before the save", async ({ page }) => {
@@ -70,6 +71,7 @@ test("deleting a memory takes a second press", async ({ page }) => {
 });
 
 test("turning Save memories off takes a second press and deletes every memory", async ({ page }) => {
+  await lookAt(page, "More");
   await lookAt(page, "Settings");
   await lookAt(page, "On");
   await expect.poll(() => sentData(page, "consent.set")).toEqual([{ kind: "store_chat", granted: true }]);
@@ -80,7 +82,7 @@ test("turning Save memories off takes a second press and deletes every memory", 
   await lookAway(page);
   await lookAt(page, "Delete all?");
   await expect.poll(async () => (await sentData(page, "consent.set")).at(-1)).toEqual({ kind: "store_chat", granted: false });
-  await lookAt(page, "Done");
+  await lookAt(page, "Back");
   await openMemories(page);
   expect(await labels(page)).not.toContain("Delete");
 });
