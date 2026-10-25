@@ -27,8 +27,15 @@ test("the last reply is bookmarked to the group last opened", async ({ page }) =
   await pinch(page, "Back");
   await startScenario(page);
   await pinch(page, "A little tired.");
-  await pinch(page, "Bookmark last reply");
+  await pinch(page, "Bookmark to Home");
   await expect.poll(() => lastSent(page, "phrase.save")).toEqual({ text: "A little tired.", groupId: "pg_home" });
+});
+
+test("Bookmark with nothing to save says what to do instead", async ({ page }) => {
+  await pinch(page, "Back");
+  await pinch(page, "Bookmark to Hospital");
+  await expect.poll(() => page.evaluate(() => window.cadence.useView.getState().notice)).toEqual({ text: "Pick a reply or type a message first", tone: "error" });
+  expect(await lastSent(page, "phrase.save")).toBeUndefined();
 });
 
 test("Type my own speaks words from the board", async ({ page }) => {

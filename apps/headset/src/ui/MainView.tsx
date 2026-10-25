@@ -60,13 +60,17 @@ function BookmarkButton() {
 
   return (
     <Button3D
-      label={t("main.bookmark")}
+      label={t("main.bookmark", { group: group?.name ?? "…" })}
       width={0.24}
       color="#5a4a2a"
       position={[-0.5 * SAVED_STEP, 0, 0]}
-      disabled={!lastSpoken || !group}
+      disabled={!group}
       onPress={() => {
-        if (!lastSpoken || !group) return;
+        if (!group) return;
+        if (!lastSpoken) {
+          notify(t("main.nothingToBookmark"), "error");
+          return;
+        }
         send("phrase.save", { text: lastSpoken, groupId: group.id });
         useHeadset.setState({ lastSpoken: null });
         notify(t("status.savedTo", { group: group.name }));
