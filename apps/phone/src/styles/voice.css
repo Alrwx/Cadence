@@ -82,6 +82,15 @@
   width: 100%;
 }
 
+textarea.input {
+  display: block;
+  min-height: 120px;
+  padding: 12px 14px;
+  font: inherit;
+  line-height: 1.4;
+  resize: vertical;
+}
+
 .center {
   display: flex;
   flex-direction: column;
@@ -205,6 +214,11 @@
   border-radius: 50%;
   background: none;
   cursor: pointer;
+}
+
+.rec:disabled {
+  opacity: 0.4;
+  cursor: default;
 }
 
 .rec::after {

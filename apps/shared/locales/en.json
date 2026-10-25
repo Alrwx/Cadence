@@ -81,5 +81,13 @@
   "voice.doneBody": "Spoken replies will now sound like this voice.",
   "voice.errorTitle": "That didn't work",
   "voice.finish": "Done",
-  "voice.stepOf": "Step {n} of 3"
+  "voice.stepOf": "Step {n} of 3",
+  "voice.pickVideo": "Use a video instead",
+  "voice.processingVideo": "Taking the audio from the first {seconds} seconds of the video…",
+  "voice.videoSelected": "The audio from the first {seconds} seconds of {name}.",
+  "voice.videoError": "Couldn't read the audio in this video: {error}",
+  "voice.chooseAgain": "Choose something else",
+  "voice.transcriptLabel": "What's said in the clip (optional)",
+  "voice.transcriptPlaceholder": "Type it word for word",
+  "voice.transcriptHint": "Only what's said in the first {seconds} seconds. Leave it blank and Cadence will work it out."
 }

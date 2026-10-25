@@ -33,7 +33,7 @@ log = logging.getLogger("models.tts")
 DEFAULT_VOICE = "default"
 MIN_SPEECH_S = 3.0  # less than this and the clone sounds like no one in particular
 MAX_REFERENCE_S = 15.0
-MAX_TRANSCRIBED_S = 28.0  # Whisper sees 30 s at a time
+MAX_TRANSCRIBED_S = 30.0  # the phone records, and keeps from a video, at most 30 s
 # Long text is spoken as chunks about one reply long, so no generation runs longer than a batch of suggestions.
 MAX_CHUNK_CHARS = 120
 

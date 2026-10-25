@@ -36,15 +36,20 @@ export async function createConsent(
   return (await readJson<{ consentId: string }>(res)).consentId;
 }
 
-/** Uploads a recorded or picked sample (audio, or video with audio) and returns the new voice ID. */
+/**
+ * Uploads a recorded or picked sample (audio, or video with audio) and returns the new voice ID.
+ * `transcript`, if given, must match the sample word for word; without it the model service transcribes the sample.
+ */
 export async function uploadVoice(
-  req: { sessionId: string; consentId: string; sample: Blob; fileName: string },
+  req: { sessionId: string; consentId: string; sample: Blob; fileName: string; transcript?: string },
   fetchImpl: Fetch = fetch,
 ): Promise<string> {
   const form = new FormData();
   form.append("audio", req.sample, req.fileName);
   form.append("consentId", req.consentId);
   form.append("sessionId", req.sessionId);
+  const transcript = req.transcript?.trim();
+  if (transcript) form.append("transcript", transcript);
   const res = await fetchImpl("/api/voices", { method: "POST", body: form });
   return (await readJson<{ voiceId: string }>(res)).voiceId;
 }
