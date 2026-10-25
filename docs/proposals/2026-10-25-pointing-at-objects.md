@@ -14,17 +14,29 @@ The user holds the reticle on something in the room, and the reply options becom
 
 Owner: Dev 1 or Dev 2. Nothing else starts until this passes.
 
-A throwaway page served by the headset dev server (for example `/headset/camera-spike.html`) that, on the Quest 3S:
+The spike page is `apps/phone/camera-spike.html` with `apps/phone/src/spike/cameraSpike.ts`. It's served by the phone dev server only, not built. Its four buttons:
 
-1. Logs the Quest OS and Quest Browser versions (Settings → System → Software update; Browser → About).
-2. Calls `enumerateDevices()` and shows every `videoinput` with its label and id. The permission prompt appears the first time.
-3. Opens the left or right back (color passthrough) camera with `getUserMedia({ video: { deviceId, width: 1280, height: 960 } })` and shows it in a `<video>`.
-4. Enters `immersive-ar` from the same page and keeps drawing the video into a WebGL plane. **Check that frames keep arriving inside the AR session.**
-5. On a button press, draws the current frame to a canvas, crops the center 40%, scales it to 512 px, encodes a JPEG (quality 0.8), and POSTs it to a stub route that saves nothing and replies with the byte count.
+1. **List cameras:** asks for camera access once, then lists every `videoinput` by label (`enumerateDevices()`).
+2. **Open camera:** opens the chosen camera with `getUserMedia({ video: { deviceId, width: 1280, height: 960 } })` and reports the size and frame rate it actually got.
+3. **Test in AR (8 s):** enters `immersive-ar`, counts new camera frames while inside the session, and crops one frame 3 s in. **This is the check that matters.**
+4. **Upload crop:** sends the crop (center 40%, 512 px JPEG, quality 0.8) and the whole report to the mock gateway's `POST /api/spike/frame`. The mock prints the report in its terminal and keeps nothing.
 
-Record the result in `docs/decisions.md`: versions, camera labels, resolution and fps seen, whether it works in AR, and the JPEG size.
+Every result, including failures, goes into one report shown on the page and printed by the mock.
 
-**Go:** a crop reaches the gateway while in AR. **No-go:** go to [Fallbacks](#fallbacks).
+### How to run it
+
+1. On the laptop: `git checkout spike/camera`, then `make dev-mock`. The spike route is only in the mock gateway, so don't use `make dev`.
+2. Put the laptop and the Quest on the same Wi-Fi, and open the dev server's port: `sudo firewall-cmd --add-port=5174/tcp`. Campus or venue Wi-Fi often blocks devices from reaching each other. If so, put both on a phone hotspot and rerun `make certs` for the new address (`hostname -I` shows it).
+3. In Quest Browser, open `https://<laptop-ip>:5174/phone/camera-spike.html` and accept the certificate warning.
+4. Press **1** and allow camera access. In the list, pick a camera whose name mentions back, left or right (the color passthrough cameras), not the front one.
+5. Press **2**, then **3**. The headset goes into AR for 8 seconds and comes back on its own.
+6. Press **4**, then read the report in the `make dev-mock` terminal.
+
+**Pass:** `inAR.newCameraFrames` is above 0 and `crop.source` is "inside AR". **Fail:** an `arError`, 0 frames in AR, or a crop that only works outside AR.
+
+Record the result in `docs/decisions.md`: Quest OS version (Settings → System → Software update), Quest Browser version (in the report's `userAgent`), camera labels, the size and fps from step 2, frames and fps inside AR, and the JPEG size.
+
+**Go:** a crop taken inside AR reaches the gateway. **No-go:** go to [Fallbacks](#fallbacks).
 
 ## Phase 1: contracts (Dev 4 owns; everyone reviews)
 

@@ -352,6 +352,15 @@ async function handleApi(req: IncomingMessage, res: ServerResponse): Promise<voi
     console.log(`voice ${voiceId} from ${body.length} bytes (consent ${consentId})`);
     return json(res, 201, { voiceId });
   }
+  // Camera spike (docs/proposals/2026-10-25-pointing-at-objects.md, phase 0): log the report, keep nothing.
+  if (req.method === "POST" && req.url === "/api/spike/frame") {
+    const body = await readBody(req, 2 * 1024 * 1024);
+    if (!body) return json(res, 413, { code: "too_large", message: "Over 2 MB." });
+    const { report, image } = JSON.parse(body.toString()) as { report: unknown; image: string };
+    const bytes = Buffer.from(image, "base64").length;
+    console.log(`camera spike: ${bytes} byte JPEG\n${JSON.stringify(report, null, 2)}`);
+    return json(res, 200, { bytes });
+  }
   json(res, 404, { code: "not_found", message: "Unknown API route." });
 }
 
