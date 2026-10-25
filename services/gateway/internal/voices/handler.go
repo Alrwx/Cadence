@@ -11,7 +11,10 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"mime"
 	"net/http"
+	"net/url"
+	"path"
 	"strings"
 
 	"github.com/Alrwx/Cadence/services/gateway/internal/models"
@@ -44,6 +47,34 @@ type Handler struct {
 	Voices   VoiceSetter
 	PersonID string // single-user for the hackathon: every session belongs to this person
 	Locale   string
+	// OriginPatterns lists extra allowed browser origins (the Vite dev servers), the same as the /ws hub.
+	OriginPatterns []string
+}
+
+// allowOrigin applies the /ws origin rule to these routes: same-origin and OriginPatterns pass, other web pages
+// don't. Without it, any page opened on the demo hotspot could post a consent and swap in a different voice,
+// since a JSON-as-text/plain or multipart POST is a "simple" request that browsers send without a preflight.
+// Requests without an Origin header (curl, tests, the model tooling) are not from a browser page and pass.
+func (h *Handler) allowOrigin(w http.ResponseWriter, r *http.Request) bool {
+	origin := r.Header.Get("Origin")
+	if origin == "" {
+		return true
+	}
+	u, err := url.Parse(origin)
+	if err == nil && u.Host != "" {
+		host := strings.ToLower(u.Host)
+		if host == strings.ToLower(r.Host) {
+			return true
+		}
+		for _, pattern := range h.OriginPatterns {
+			if ok, _ := path.Match(strings.ToLower(pattern), host); ok {
+				return true
+			}
+		}
+	}
+	slog.Warn("blocked cross-origin request", "path", r.URL.Path, "origin", origin)
+	writeError(w, http.StatusForbidden, "bad_origin", "Requests from this page aren't allowed.")
+	return false
 }
 
 type consentRequest struct {
@@ -55,6 +86,14 @@ type consentRequest struct {
 
 // Consent handles POST /api/consent.
 func (h *Handler) Consent(w http.ResponseWriter, r *http.Request) {
+	if !h.allowOrigin(w, r) {
+		return
+	}
+	// JSON only: a text/plain body is how a cross-site "no-cors" fetch would get past the browser.
+	if ct, _, _ := mime.ParseMediaType(r.Header.Get("Content-Type")); ct != "application/json" {
+		writeError(w, http.StatusUnsupportedMediaType, "bad_request", "Send the consent as application/json.")
+		return
+	}
 	var req consentRequest
 	dec := json.NewDecoder(http.MaxBytesReader(w, r.Body, maxConsentBytes))
 	if err := dec.Decode(&req); err != nil {
@@ -86,6 +125,9 @@ func (h *Handler) Consent(w http.ResponseWriter, r *http.Request) {
 
 // Upload handles POST /api/voices (multipart: audio, consentId, sessionId, optional transcript).
 func (h *Handler) Upload(w http.ResponseWriter, r *http.Request) {
+	if !h.allowOrigin(w, r) {
+		return
+	}
 	r.Body = http.MaxBytesReader(w, r.Body, MaxSampleBytes+multipartOverhead)
 	form, err := readForm(r)
 	var tooBig *http.MaxBytesError

@@ -50,8 +50,10 @@ func newHandler(t *testing.T) (*Handler, *fakeCloner, *fakeSetter) {
 }
 
 func postConsent(h *Handler, body string) *httptest.ResponseRecorder {
+	req := httptest.NewRequest(http.MethodPost, "/api/consent", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
-	h.Consent(rec, httptest.NewRequest(http.MethodPost, "/api/consent", strings.NewReader(body)))
+	h.Consent(rec, req)
 	return rec
 }
 
@@ -190,5 +192,53 @@ func TestUploadModelFailure(t *testing.T) {
 	}
 	if _, ok, _ := h.Store.ActiveVoice(context.Background(), "p1"); ok || fs.voice != "" {
 		t.Fatal("a failed clone must not create or switch to a voice")
+	}
+}
+
+func TestRoutesRejectOtherOrigins(t *testing.T) {
+	h, fc, _ := newHandler(t)
+	h.OriginPatterns = []string{"*:5174"}
+	consentBody := `{"sessionId":"demo","kind":"voice_clone","voiceOwner":"Alex","statement":"voice.consentCheck"}`
+	consent := func(origin, contentType string) int {
+		req := httptest.NewRequest(http.MethodPost, "https://10.0.0.5:8443/api/consent", strings.NewReader(consentBody))
+		req.Header.Set("Content-Type", contentType)
+		if origin != "" {
+			req.Header.Set("Origin", origin)
+		}
+		rec := httptest.NewRecorder()
+		h.Consent(rec, req)
+		return rec.Code
+	}
+
+	for name, tc := range map[string]struct {
+		origin, contentType string
+		want                int
+	}{
+		"no origin (curl)":        {"", "application/json", http.StatusCreated},
+		"same origin (gateway)":   {"https://10.0.0.5:8443", "application/json", http.StatusCreated},
+		"phone dev server":        {"https://10.0.0.5:5174", "application/json; charset=utf-8", http.StatusCreated},
+		"other page on hotspot":   {"https://evil.example", "application/json", http.StatusForbidden},
+		"no-cors text/plain post": {"", "text/plain;charset=UTF-8", http.StatusUnsupportedMediaType},
+	} {
+		if got := consent(tc.origin, tc.contentType); got != tc.want {
+			t.Errorf("%s: status %d, want %d", name, got, tc.want)
+		}
+	}
+
+	// A cross-site multipart post never reaches the model service.
+	var body bytes.Buffer
+	w := multipart.NewWriter(&body)
+	part, _ := w.CreateFormFile("audio", "sample.webm")
+	_, _ = part.Write([]byte("x"))
+	_ = w.WriteField("consentId", "consent_x")
+	_ = w.WriteField("sessionId", "demo")
+	_ = w.Close()
+	req := httptest.NewRequest(http.MethodPost, "https://10.0.0.5:8443/api/voices", &body)
+	req.Header.Set("Content-Type", w.FormDataContentType())
+	req.Header.Set("Origin", "https://evil.example")
+	rec := httptest.NewRecorder()
+	h.Upload(rec, req)
+	if rec.Code != http.StatusForbidden || decode(t, rec)["code"] != "bad_origin" || fc.calls != 0 {
+		t.Fatalf("cross-origin upload: %d %s, model calls %d", rec.Code, rec.Body, fc.calls)
 	}
 }

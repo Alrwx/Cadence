@@ -15,22 +15,32 @@ const (
 
 // CreateConsent stores a granted consent record and returns its id.
 // statement is the locale key of the consent text the user agreed to, so the record says what was shown.
+// voiceOwner (whose voice is cloned) and statement are required for voice_clone; store_chat has no voice
+// owner, and its statement is optional.
 func (s *Store) CreateConsent(ctx context.Context, personID, kind, voiceOwner, statement string) (string, error) {
-	if kind != ConsentVoiceClone && kind != ConsentStoreChat {
+	var owner, shown sql.NullString
+	switch kind {
+	case ConsentVoiceClone:
+		o, err := cleanText(voiceOwner, 120)
+		if err != nil {
+			return "", err
+		}
+		st, err := cleanText(statement, 120)
+		if err != nil {
+			return "", err
+		}
+		owner, shown = sql.NullString{String: o, Valid: true}, sql.NullString{String: st, Valid: true}
+	case ConsentStoreChat:
+		if st, err := cleanText(statement, 120); err == nil {
+			shown = sql.NullString{String: st, Valid: true}
+		}
+	default:
 		return "", fmt.Errorf("%w: unknown consent kind %q", ErrInvalid, kind)
 	}
-	owner, err := cleanText(voiceOwner, 120)
-	if err != nil {
-		return "", err
-	}
-	statement, err = cleanText(statement, 120)
-	if err != nil {
-		return "", err
-	}
 	id := newID("consent")
-	_, err = s.DB.ExecContext(ctx,
+	_, err := s.DB.ExecContext(ctx,
 		`INSERT INTO consent (id, person_id, kind, granted_at, voice_owner, statement) VALUES (?, ?, ?, ?, ?, ?)`,
-		id, personID, kind, now(), owner, statement)
+		id, personID, kind, now(), owner, shown)
 	if err != nil {
 		return "", fmt.Errorf("create consent: %w", err)
 	}

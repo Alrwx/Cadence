@@ -52,7 +52,7 @@ All dates 2026-10-24.
 - Headless Chromium against the mock gateway: 18/18 checks (captions, ring, playback + `audio.done`, back-to-back clips, reconnect after restart, voice setup).
 - Not yet tested on real phones.
 
-## 8. Gateway consent + voice routes (in progress, uncommitted)
+## 8. PR #13 — `[gateway]` consent + voice upload routes
 
 Gateway code is Dev 4's area; the PR needs Dev 4's review.
 
@@ -64,8 +64,4 @@ Gateway code is Dev 4's area; the PR needs Dev 4's review.
 - Tests: store, model client, handler, orchestrator voice switch; all gateway tests pass with `-race`, 5 repeat runs stable.
 - End to end with the real gateway binary + mock models: consent 201, upload with transcript 201, bad consent 403, restart keeps the voice.
 - Found: the model service requires `transcript`, so the phone's real upload fails with 502 until Dev 3 makes it optional.
-
-## Housekeeping
-
-- Turned off the Claude co-author line in `~/.claude/settings.json`.
-- Local backup branch `phone/voice-setup-old` (safe to delete).
+- Review fixes from David: `store_chat` consent no longer needs a voice owner; `/api` routes reject other web origins (same rule as `/ws`) and consent must be JSON.

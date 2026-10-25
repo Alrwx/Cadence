@@ -2,6 +2,7 @@ package store
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"testing"
 )
@@ -25,6 +26,19 @@ func TestVoiceConsentAndProfiles(t *testing.T) {
 		if _, err := s.CreateConsent(ctx, "p1", tc.kind, tc.owner, tc.statement); !errors.Is(err, ErrInvalid) {
 			t.Errorf("CreateConsent(%q, %q, %q) err = %v, want ErrInvalid", tc.kind, tc.owner, tc.statement, err)
 		}
+	}
+
+	// store_chat has no voice owner; it must not be rejected for one (consent.set over the WebSocket, #11).
+	chat, err := s.CreateConsent(ctx, "p1", ConsentStoreChat, "", "")
+	if err != nil {
+		t.Fatalf("store_chat consent: %v", err)
+	}
+	var chatOwner sql.NullString
+	if err := s.DB.QueryRow(`SELECT voice_owner FROM consent WHERE id = ?`, chat).Scan(&chatOwner); err != nil || chatOwner.Valid {
+		t.Fatalf("store_chat voice_owner = %+v, %v; want NULL", chatOwner, err)
+	}
+	if err := s.ActiveConsent(ctx, "p1", chat, ConsentVoiceClone); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("a store_chat consent must not authorize a voice clone: %v", err)
 	}
 
 	consent, err := s.CreateConsent(ctx, "p1", ConsentVoiceClone, "  Alex   Rivera ", "voice.consentCheck")

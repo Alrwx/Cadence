@@ -70,7 +70,10 @@ func run() error {
 	mux := http.NewServeMux()
 	mux.Handle("GET /ws", h)
 	mux.Handle("GET /clips/{file}", cc)
-	vh := &voices.Handler{Store: st, Models: mc, Voices: orch, PersonID: defaultPersonID, Locale: locale}
+	vh := &voices.Handler{
+		Store: st, Models: mc, Voices: orch, PersonID: defaultPersonID, Locale: locale,
+		OriginPatterns: h.OriginPatterns, // same rule as /ws
+	}
 	mux.HandleFunc("POST /api/consent", vh.Consent)
 	mux.HandleFunc("POST /api/voices", vh.Upload)
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, r *http.Request) {

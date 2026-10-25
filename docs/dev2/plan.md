@@ -18,9 +18,9 @@ Full history of what was done: [log.md](log.md).
 
 ## In progress
 
-- [ ] **[gateway] Consent + voice upload routes**: uncommitted on `main`; move to branch `gateway/voice-routes`, commit, PR, tag Dev 4 (gateway owner).
+- [ ] **[gateway] Consent + voice upload routes (PR #13)**: reviewed by David; review fixes applied (store_chat consent, origin check).
   - `POST /api/consent`, `POST /api/voices`, migration 003, live voice switch, last voice reloaded on restart.
-  - Tests pass (`go test -race ./...` in `services/gateway`); checked end to end with the real gateway binary + mock models.
+- [ ] **Robot voice for demo step 6**: needs a way back to the "default" voice; `SetVoice` only moves to the newest cloned voice.
 
 ## Blocked on others
 
@@ -30,7 +30,6 @@ Full history of what was done: [log.md](log.md).
 
 ## Left for Dev 2
 
-- [ ] Open the gateway voice-routes PR (branch `gateway/voice-routes`)
 - [ ] Real-phone test: install mkcert, `make certs`, `make dev-mock`; iOS Safari + Android Chrome: captions, ring, clip after Start, reconnect after restart, voice recording
 - [ ] After Dev 3's fix lands: full voice setup against the real gateway + model service
 - [ ] Group chat: consent on phone vs. headset, phone tests (no `make test-phone`), who sets up ESLint, Dev 1 moving headset strings to `@cadence/shared/i18n`
@@ -41,4 +40,3 @@ Full history of what was done: [log.md](log.md).
 - Shared tests: `npx --yes pnpm@9.15.9 --filter @cadence/shared test`
 - Gateway tests: `cd services/gateway && go test -race ./...`
 - Local-only file (git-ignored): `DEV2-voice-upload-proposal.md` in the repo root
-- Old local branch `phone/voice-setup-old` is a backup; safe to delete (`git branch -D phone/voice-setup-old`).
