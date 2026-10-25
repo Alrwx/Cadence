@@ -1,0 +1,378 @@
+/* Design tokens, type, buttons, inputs and motion shared by every screen. Follows the phone's light or dark setting. */
+:root {
+  color-scheme: light;
+  --bg: #f3f4f1;
+  --surface: #fff;
+  --fill: rgb(23 26 25 / 0.06);
+  --fill-strong: rgb(23 26 25 / 0.2);
+  --text: #171a19;
+  --muted: #5f6a64;
+  --line: rgb(23 26 25 / 0.1);
+  --accent: #0f766e;
+  --on-accent: #fff;
+  --danger: #cf3b3b;
+  --ok: #2e9e5b;
+  --warn: #9a5a06;
+  --radius: 18px;
+  --ease: cubic-bezier(0.32, 0.72, 0, 1);
+  --font: "Figtree Variable", system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #0d1211;
+  --surface: #151c1a;
+  --fill: rgb(255 255 255 / 0.08);
+  --fill-strong: rgb(255 255 255 / 0.22);
+  --text: #eef3f1;
+  --muted: #93a09b;
+  --line: rgb(255 255 255 / 0.09);
+  --accent: #2dd4bf;
+  --on-accent: #04211d;
+  --danger: #ff6b6b;
+  --ok: #4ade80;
+  --warn: #f5b544;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  margin: 0;
+  min-height: 100%;
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font: 17px/1.4 var(--font);
+  -webkit-font-smoothing: antialiased;
+  -webkit-tap-highlight-color: transparent;
+}
+
+h1 {
+  margin: 0;
+  font-size: 34px;
+  font-weight: 700;
+  line-height: 1.1;
+  letter-spacing: -0.025em;
+}
+
+h2 {
+  margin: 0;
+  font-size: 20px;
+  line-height: 1.2;
+}
+
+p {
+  margin: 0;
+}
+
+button,
+input {
+  font: inherit;
+  color: inherit;
+}
+
+.subtitle,
+.muted {
+  color: var(--muted);
+}
+
+h1 + .subtitle {
+  margin-top: 8px;
+}
+
+.small {
+  font-size: 14px;
+}
+
+.card {
+  background: var(--surface);
+  border-radius: var(--radius);
+}
+
+.notice {
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--warn) 14%, transparent);
+  color: var(--warn);
+  font-size: 15px;
+}
+
+.error-text {
+  color: var(--danger);
+}
+
+/* Buttons: one filled primary per screen, everything else is quiet text. */
+.btn {
+  min-height: 52px;
+  padding: 0 24px;
+  border: 0;
+  border-radius: 14px;
+  background: var(--fill);
+  color: var(--accent);
+  font-weight: 600;
+  cursor: pointer;
+  transition:
+    transform 0.15s var(--ease),
+    opacity 0.15s;
+}
+
+.btn:active {
+  transform: scale(0.97);
+}
+
+.btn:disabled {
+  opacity: 0.4;
+  pointer-events: none;
+}
+
+.btn-primary {
+  background: var(--accent);
+  color: var(--on-accent);
+}
+
+.btn-text {
+  min-height: 44px;
+  padding: 0 12px;
+  background: none;
+}
+
+.btn-small {
+  min-height: 44px;
+  padding: 0 16px;
+  border-radius: 12px;
+}
+
+.btn-large {
+  min-height: 64px;
+  padding: 0 64px;
+  border-radius: 20px;
+  font-size: 22px;
+}
+
+.btn-danger {
+  background: color-mix(in srgb, var(--danger) 14%, transparent);
+  color: var(--danger);
+}
+
+.icon-btn {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: none;
+  color: var(--accent);
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.icon-btn:active {
+  background: var(--fill);
+}
+
+.icon-btn:disabled {
+  opacity: 0.3;
+  pointer-events: none;
+}
+
+.icon-btn.danger {
+  color: var(--danger);
+}
+
+.icon-btn.fill {
+  background: var(--accent);
+  color: var(--on-accent);
+}
+
+.input {
+  width: 100%;
+  min-width: 0;
+  min-height: 48px;
+  padding: 0 14px;
+  border: 1px solid transparent;
+  border-radius: 12px;
+  background: var(--fill);
+  outline: none;
+  transition:
+    border-color 0.15s,
+    box-shadow 0.15s;
+}
+
+.input:focus {
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 35%, transparent);
+}
+
+.input[aria-invalid="true"] {
+  border-color: var(--danger);
+}
+
+.field-label {
+  display: block;
+  margin: 0 0 6px 4px;
+  color: var(--muted);
+  font-size: 13px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+/* Colours ease over while the theme is being switched, then transitions go back to normal. */
+.theme-fade,
+.theme-fade *,
+.theme-fade *::before,
+.theme-fade *::after {
+  transition:
+    background-color 0.3s,
+    color 0.3s,
+    border-color 0.3s,
+    fill 0.3s,
+    stroke 0.3s !important;
+}
+
+/* The little orb that says "working on it": breathes, with rings drifting off it. */
+.orb {
+  position: relative;
+  width: var(--size, 96px);
+  height: var(--size, 96px);
+  flex: none;
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 30%, color-mix(in srgb, var(--accent) 55%, white), var(--accent));
+  animation: breathe 2.6s ease-in-out infinite;
+}
+
+.orb::before,
+.orb::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border: 2px solid var(--accent);
+  border-radius: 50%;
+  opacity: 0;
+  animation: ring-out 2.6s ease-out infinite;
+}
+
+.orb::after {
+  animation-delay: 1.3s;
+}
+
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+}
+
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+}
+
+@keyframes fade-out {
+  to {
+    opacity: 0;
+  }
+}
+
+@keyframes slide-in-right {
+  from {
+    opacity: 0;
+    transform: translateX(32px);
+  }
+}
+
+@keyframes slide-in-left {
+  from {
+    opacity: 0;
+    transform: translateX(-32px);
+  }
+}
+
+@keyframes slide-out-right {
+  to {
+    opacity: 0;
+    transform: translateX(32px);
+  }
+}
+
+@keyframes slide-up {
+  from {
+    transform: translateY(100%);
+  }
+}
+
+@keyframes slide-down {
+  to {
+    transform: translateY(100%);
+  }
+}
+
+@keyframes breathe {
+  50% {
+    transform: scale(0.92);
+  }
+}
+
+@keyframes ring-out {
+  from {
+    opacity: 0.5;
+    transform: scale(1);
+  }
+  to {
+    opacity: 0;
+    transform: scale(1.7);
+  }
+}
+
+@keyframes pop {
+  from {
+    opacity: 0;
+    transform: scale(0.6);
+  }
+}
+
+@keyframes draw {
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+@keyframes bounce {
+  50% {
+    transform: scaleY(0.35);
+  }
+}
+
+/* With "reduce motion" on, slides become short fades and nothing loops. */
+@media (prefers-reduced-motion: reduce) {
+  .sheet,
+  .push,
+  .step {
+    animation: fade-in 0.2s both !important;
+  }
+
+  .sheet.closing,
+  .push.closing {
+    animation: fade-out 0.2s both !important;
+  }
+
+  .orb,
+  .orb::before,
+  .orb::after,
+  .bars i,
+  .captions p,
+  .dock,
+  .phrase {
+    animation: none !important;
+  }
+}

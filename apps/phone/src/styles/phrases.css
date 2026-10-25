@@ -1,0 +1,132 @@
+/* Saved phrases: grouped lists with small icon buttons, one card per group. */
+.push {
+  overflow-y: auto;
+  animation-name: slide-in-right;
+}
+
+.push.closing {
+  animation-name: slide-out-right;
+}
+
+.phrases {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  width: min(100%, 560px);
+  margin: 0 auto;
+  padding: 8px 20px 32px;
+}
+
+.nav {
+  margin-left: -12px;
+}
+
+.back {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding-left: 4px;
+}
+
+.group {
+  padding: 4px 16px 12px;
+}
+
+.group-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 52px;
+}
+
+.group-title {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.group-title h2 {
+  overflow-wrap: anywhere;
+}
+
+.tools {
+  display: flex;
+  margin-right: -10px;
+}
+
+.phrase-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.phrase {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  border-top: 1px solid var(--line);
+  animation: rise 0.3s var(--ease) both;
+}
+
+.phrase-main {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+  padding: 10px 0;
+}
+
+.phrase-text {
+  overflow-wrap: anywhere;
+}
+
+.phrase.editing {
+  padding: 10px 0;
+}
+
+.confirm {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: 100%;
+  padding: 0 0 12px;
+}
+
+.confirm .actions {
+  display: flex;
+  gap: 8px;
+}
+
+.text-form {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: 100%;
+  padding-top: 10px;
+}
+
+.text-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.text-row .input {
+  flex: 1 1 160px;
+}
+
+.new-group {
+  padding: 12px 16px;
+}
+
+.new-group .text-form {
+  padding-top: 0;
+}
+
+.status-text {
+  padding: 24px 0;
+  text-align: center;
+}

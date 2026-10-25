@@ -3,6 +3,16 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="color-scheme" content="light dark" />
+    <meta name="theme-color" content="#f3f4f1" />
+    <script>
+      // Apply the saved or system theme before the first paint, so a dark phone never flashes white.
+      try {
+        document.documentElement.dataset.theme =
+          localStorage.getItem("cadence-theme") ||
+          (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
+      } catch {}
+    </script>
     <title>Cadence – Phone</title>
     <link rel="stylesheet" href="/src/styles.css" />
   </head>
