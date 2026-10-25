@@ -30,6 +30,13 @@ type Handler interface {
 	OnAudio(s *Session, frame []byte)
 }
 
+// DisconnectHandler is optionally implemented by a Handler to hear when a client's socket closes.
+// last is true when no client of the session is still connected. A socket replaced by a reconnect
+// doesn't count as a disconnect.
+type DisconnectHandler interface {
+	OnDisconnect(s *Session, role Role, last bool)
+}
+
 type Hub struct {
 	handler Handler
 	// OriginPatterns lists extra allowed origins (the Vite dev servers); same-origin is always allowed.
@@ -112,11 +119,16 @@ func (h *Hub) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	h.read(r.Context(), s, role, conn)
 
 	s.mu.Lock()
-	if s.clients[role] == conn {
+	removed := s.clients[role] == conn
+	if removed {
 		delete(s.clients, role)
 	}
+	last := len(s.clients) == 0
 	s.mu.Unlock()
 	slog.Info("client disconnected", "session", sessionID, "role", role)
+	if dh, ok := h.handler.(DisconnectHandler); ok && removed {
+		dh.OnDisconnect(s, role, last)
+	}
 }
 
 func (h *Hub) read(ctx context.Context, s *Session, role Role, conn *websocket.Conn) {

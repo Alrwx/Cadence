@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"time"
 
 	"github.com/Alrwx/Cadence/services/gateway/internal/models"
 )
@@ -44,6 +45,7 @@ func (o *Orchestrator) clipIn(ctx context.Context, voice, text, locale string) (
 	if ok && o.clips.Has(id) {
 		return id, nil
 	}
+	markWaited(ctx)
 
 	key := voice + "\x00" + locale + "\x00" + text
 	o.flightMu.Lock()
@@ -71,7 +73,14 @@ func (o *Orchestrator) clipIn(ctx context.Context, voice, text, locale string) (
 
 // synthesize calls /tts and records the clip. existingID reuses a DB row whose file went missing.
 func (o *Orchestrator) synthesize(ctx context.Context, voice, locale, text, existingID string) (string, error) {
+	sessionID, purpose := ttsPurpose(ctx)
+	start := time.Now()
 	wav, err := o.models.TTS(ctx, voice, text, locale)
+	if err != nil {
+		o.recordSince(sessionID, metricTTS, start, purpose+":error")
+	} else {
+		o.recordSince(sessionID, metricTTS, start, purpose)
+	}
 	if err != nil {
 		return "", fmt.Errorf("tts: %w", err)
 	}

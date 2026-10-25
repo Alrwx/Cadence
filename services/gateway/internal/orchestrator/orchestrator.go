@@ -47,6 +47,10 @@ type Orchestrator struct {
 	inflight map[string]*flight // clip-cache key -> synthesis in progress
 	warming  atomic.Bool
 	rewarm   atomic.Bool // a warm-up was requested while one was running (e.g. the voice changed)
+
+	writer *dbWriter // metric, session and turn rows, written off the event path (metrics.go)
+
+	speculateAfter time.Duration // partial-transcript debounce before a speculative /suggest; 0 = default (speculation.go)
 }
 
 type sessionState struct {
@@ -59,6 +63,8 @@ type sessionState struct {
 	history     []models.Turn
 	cancelTurn  context.CancelFunc // cancels the in-flight /suggest for the current turn
 
+	spec speculator // speculative /suggest on partials; its own lock, taken before mu (speculation.go)
+
 	// The speech-to-text stream is managed separately because opening it can block on a dial.
 	sttMu       sync.Mutex
 	stt         *models.STTStream
@@ -70,10 +76,12 @@ func New(st *store.Store, mc *models.Client, cc *clips.Cache, personID, locale s
 		store: st, models: mc, clips: cc,
 		personID: personID, locale: locale, revoked: map[string]bool{},
 		state: map[string]*sessionState{}, inflight: map[string]*flight{},
+		writer: newDBWriter(),
 	}
 }
 
 func (o *Orchestrator) OnConnect(s *hub.Session, role hub.Role) {
+	o.sessionStarted(s.ID)
 	ss := o.session(s.ID)
 	ss.mu.Lock()
 	ss.hub = s
@@ -176,9 +184,12 @@ func (o *Orchestrator) speak(ctx context.Context, s *hub.Session, ss *sessionSta
 		o.sendError(ctx, s, "unknown_phrase", "Nothing to say for that selection.")
 		return
 	}
+	selectedAt := time.Now()
 	if !o.apply(ctx, s, ss, session.Speak) {
 		return
 	}
+	o.record(s.ID, metricSelection, -1, source)
+	ctx, tag := withTTSPurpose(ctx, s.ID, source)
 	clipID, err := o.clipFor(ctx, text, locale)
 	if err != nil {
 		slog.Error("tts", "session", s.ID, "err", err)
@@ -193,6 +204,7 @@ func (o *Orchestrator) speak(ctx context.Context, s *hub.Session, ss *sessionSta
 	ss.addTurnLocked("user", text)
 	turnID := ss.turnID
 	ss.mu.Unlock()
+	o.spoken(s.ID, source, text, selectedAt, tag) // queued before the send, so it's in by the time the phone hears it
 	_ = s.Send(ctx, hub.Phone, protocol.TypeAudioPlay, turnID, protocol.AudioPlayData{
 		ClipID: clipID, URL: "/clips/" + clipID + ".wav", Text: text, Source: source,
 	})

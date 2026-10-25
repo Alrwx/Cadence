@@ -57,6 +57,7 @@ func run() error {
 	}
 
 	orch := orchestrator.New(st, mc, cc, defaultPersonID, locale)
+	defer orch.Close() // runs before st.Close: finishes queued metric/turn writes
 	// Speak in the voice recorded on the phone, if there is one with consent still granted.
 	if voiceID, ok, err := st.ActiveVoice(ctx, defaultPersonID); err != nil {
 		return err
@@ -77,6 +78,7 @@ func run() error {
 	mux.HandleFunc("POST /api/consent", vh.Consent)
 	mux.HandleFunc("POST /api/voices", vh.Upload)
 	mux.HandleFunc("DELETE /api/voices", vh.Revoke)
+	mux.HandleFunc("GET /api/metrics/summary", metricsSummary(st))
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, r *http.Request) {
 		health, err := mc.Health(r.Context())
 		if err != nil {

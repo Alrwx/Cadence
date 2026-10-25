@@ -79,3 +79,8 @@ Append-only. One entry per decision: date, decision, why, who.
 - `voice_profile` inserts check in the same statement that the consent is still active. An upload whose consent is withdrawn while the model service clones gets `403 no_consent`, and the gateway deletes the new model voice. It also deletes it if saving the profile fails for any other reason.
 **Why:** §2: revoking consent deletes the voice and all of its clips. The clip cache has no FK to `voice_profile` (migration 002), so the delete happens in code, ordered so a crash at any step leaves no usable voice under a revoked consent.
 **Who:** Dev 4
+
+### 2026-10-24 – Speculative `/suggest` is reused when the final has the same words
+**Decision:** The gateway calls `/suggest` on a partial transcript after 400 ms with no new words. When the final arrives, it reuses that answer only if (a) the final and the partial match after normalizing (lowercase, punctuation and symbols removed except apostrophes inside words, whitespace collapsed), and (b) the earlier turns sent with it are unchanged. Otherwise the speculative call is cancelled and `/suggest` runs on the final. A speculative answer is never shown before the final; it becomes the turn's suggestions through the usual final → SUGGESTING → CHOOSING path.
+**Why:** Partials and finals from Whisper often differ only in case, commas, or a closing "?" or ".", and none of that changes which replies fit. Stripping all punctuation rather than only trailing punctuation catches the comma differences too. Any change in the words means the speaker said something else, so the answer is redone instead of guessing. The `speculation` metric (`hit`/`miss`/`none`/`failed`) shows how often this pays off.
+**Who:** Alvin (Dev 4)

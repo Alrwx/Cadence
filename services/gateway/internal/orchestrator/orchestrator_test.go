@@ -33,10 +33,17 @@ type fakeModels struct {
 	sttDials     atomic.Int64
 	missingVoice string // /tts answers 404 for this voiceId, as the model service does for an unknown voice
 
-	mu            sync.Mutex
-	suggestReqs   []models.SuggestRequest
-	ttsVoices     map[string]int // /tts calls per voiceId
-	deletedVoices []string       // DELETE /voices/{id} calls
+	// Speculation tests: sttScript, if set, replaces the canned transcript with the messages sent on it.
+	// suggestDelayFor overrides suggestDelay per request, suggestEcho makes each reply quote the last turn,
+	// and suggestCancelled counts /suggest calls the gateway gave up on before they answered.
+	sttScript        chan string
+	suggestDelayFor  func(models.SuggestRequest) time.Duration
+	suggestEcho      bool
+	suggestCancelled atomic.Int64
+	mu               sync.Mutex
+	suggestReqs      []models.SuggestRequest
+	ttsVoices        map[string]int // /tts calls per voiceId
+	deletedVoices    []string       // DELETE /voices/{id} calls
 }
 
 func (f *fakeModels) ttsCallsFor(voice string) int {
@@ -80,16 +87,31 @@ func (f *fakeModels) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		f.mu.Lock()
 		f.suggestReqs = append(f.suggestReqs, req)
 		f.mu.Unlock()
-		time.Sleep(f.suggestDelay)
+		delay := f.suggestDelay
+		if f.suggestDelayFor != nil {
+			delay = f.suggestDelayFor(req)
+		}
+		select {
+		case <-time.After(delay):
+		case <-r.Context().Done():
+			f.suggestCancelled.Add(1)
+			return
+		}
 		if f.suggestFail {
 			http.Error(w, "model crashed", http.StatusInternalServerError)
 			return
 		}
-		_ = json.NewEncoder(w).Encode(models.SuggestResponse{TurnID: req.TurnID, Ms: 1, Items: []models.Suggestion{
+		items := []models.Suggestion{
 			{Text: "I'm doing fine, thanks", Kind: "statement"},
 			{Text: "Not so great today", Kind: "statement"},
 			{Text: "Can you say that again?", Kind: "question"},
-		}})
+		}
+		if f.suggestEcho && len(req.History) > 0 {
+			for i := range items {
+				items[i].Text = req.History[len(req.History)-1].Text + " / " + items[i].Text
+			}
+		}
+		_ = json.NewEncoder(w).Encode(models.SuggestResponse{TurnID: req.TurnID, Ms: 1, Items: items})
 	case "/stt":
 		f.sttDials.Add(1)
 		if f.sttDown {
@@ -102,6 +124,23 @@ func (f *fakeModels) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 		defer conn.CloseNow()
 		ctx := r.Context()
+		if f.sttScript != nil {
+			go func() { // discard mic frames
+				for {
+					if _, _, err := conn.Read(ctx); err != nil {
+						return
+					}
+				}
+			}()
+			for {
+				select {
+				case msg := <-f.sttScript:
+					_ = conn.Write(ctx, websocket.MessageText, []byte(msg))
+				case <-ctx.Done():
+					return
+				}
+			}
+		}
 		sent := false
 		for {
 			if _, _, err := conn.Read(ctx); err != nil {
@@ -145,7 +184,9 @@ func newTestOrchestrator(t *testing.T, fm *fakeModels) *Orchestrator {
 	}
 	ms := httptest.NewServer(fm)
 	t.Cleanup(ms.Close)
-	return New(st, models.New(ms.URL), cc, "p1", store.DefaultLocale)
+	o := New(st, models.New(ms.URL), cc, "p1", store.DefaultLocale)
+	t.Cleanup(o.Close) // cleanups run last-in first-out, so this runs before st.Close
+	return o
 }
 
 // client is one side (headset or phone) of a test session.
@@ -411,9 +452,13 @@ func TestClipForSharesConcurrentSynthesis(t *testing.T) {
 }
 
 // pairedSession connects a headset and a phone, unlocks the phone, and waits until the session is LISTENING.
-func pairedSession(t *testing.T, fm *fakeModels) (o *Orchestrator, headset, phone *client) {
+// configure, if given, adjusts the orchestrator before anything connects.
+func pairedSession(t *testing.T, fm *fakeModels, configure ...func(*Orchestrator)) (o *Orchestrator, headset, phone *client) {
 	t.Helper()
 	o = newTestOrchestrator(t, fm)
+	for _, c := range configure {
+		c(o)
+	}
 	srv := httptest.NewServer(hub.New(o))
 	t.Cleanup(srv.Close)
 	headset = dial(t, srv.URL, "headset")
