@@ -8,7 +8,7 @@ The user holds the reticle on something in the room, and the reply options becom
 
 - **The model can already see.** `gemma4:e4b` on the 3080 lists `vision` in its capabilities (Ollama 0.40.2, checked 2026-10-25). The model that writes suggestions can also name what's in a photo. No new model to load or fit into VRAM.
 - **Quest Browser seems to expose the cameras to web pages.** Reports say that from Quest OS v77, the color passthrough cameras show up as ordinary video inputs: `navigator.mediaDevices.enumerateDevices()`, then `getUserMedia({ video: { deviceId } })`. One developer did this on a Quest 3 with Quest Browser 39 and sent frames to an image model. This isn't the WebXR `camera-access` feature, which is why requesting that feature fails (`AGENTS(GH).md` §1).
-- **Still unknown for us:** whether it works on the Quest 3S on our OS and browser versions, and whether the stream keeps delivering frames *during* an `immersive-ar` session.
+- **Still unknown for us:** whether it works on the Quest 3S on our OS and browser versions, and whether the stream keeps delivering frames _during_ an `immersive-ar` session.
 
 ## Phase 0: camera spike (go/no-go, about 2 hours)
 
@@ -25,16 +25,16 @@ Every result, including failures, goes into one report shown on the page and pri
 
 ### How to run it
 
-1. On the laptop: `git checkout spike/camera`, then `make dev-mock`. The spike route is only in the mock gateway, so don't use `make dev`.
+1. On the laptop, on `main` (the spike is merged): `make dev-mock`. The spike route is only in the mock gateway, so don't use `make dev`.
 2. Put the laptop and the Quest on the same Wi-Fi, and open the dev server's port: `sudo firewall-cmd --add-port=5174/tcp`. Campus or venue Wi-Fi often blocks devices from reaching each other. If so, put both on a phone hotspot and rerun `make certs` for the new address (`hostname -I` shows it).
 3. In Quest Browser, open `https://<laptop-ip>:5174/phone/camera-spike.html` and accept the certificate warning.
 4. Press **1** and allow camera access. In the list, pick a camera whose name mentions back, left or right (the color passthrough cameras), not the front one.
-5. Press **2**, then **3**. The headset goes into AR for 8 seconds and comes back on its own.
+5. Press **2**, then **3**. The headset goes into AR for 8 seconds and comes back on its own. While in AR, look straight at one object about 1–2 m away (a cup works well); the crop is taken 3 s in.
 6. Press **4**, then read the report in the `make dev-mock` terminal.
 
 **Pass:** `inAR.newCameraFrames` is above 0 and `crop.source` is "inside AR". **Fail:** an `arError`, 0 frames in AR, or a crop that only works outside AR.
 
-Record the result in `docs/decisions.md`: Quest OS version (Settings → System → Software update), Quest Browser version (in the report's `userAgent`), camera labels, the size and fps from step 2, frames and fps inside AR, and the JPEG size.
+Record the result in `docs/decisions.md`: Quest OS version (Settings → System → Software update), Quest Browser version (in the report's `userAgent`), camera labels, the size and fps from step 2, frames and fps inside AR, the JPEG size, and whether the object you looked at is in the crop (and roughly how far off-center). That last one tells us how much the camera's view differs from where the head points, which head-gaze and controller pointing both depend on.
 
 **Go:** a crop taken inside AR reaches the gateway. **No-go:** go to [Fallbacks](#fallbacks).
 
@@ -46,27 +46,27 @@ Additive only, so no `v` bump.
 
 A JPEG is too big to put inside the JSON events, so this uses plain HTTPS like `/api/voices`. It has the same origin check as `/api/consent` and `/api/voices`.
 
-| Field (multipart) | Notes |
-|---|---|
-| `image` | JPEG, ≤ 512 px on the long side, ≤ 300 KB |
-| `sessionId` | which session's suggestions to steer |
+| Field (multipart) | Notes                                     |
+| ----------------- | ----------------------------------------- |
+| `image`           | JPEG, ≤ 512 px on the long side, ≤ 300 KB |
+| `sessionId`       | which session's suggestions to steer      |
 
 Response `202 { lookId }`. The result arrives over the WebSocket, so the headset doesn't block on the model. Errors: `400 bad_request`, `413 too_large`, `403 bad_origin`, `409 not_listening` (before Start or while a reply plays).
 
 ### Gateway → headset events
 
-| Event | Direction | `data` |
-|---|---|---|
+| Event         | Direction    | `data`                                                               |
+| ------------- | ------------ | -------------------------------------------------------------------- |
 | `look.result` | gw → headset | `{ lookId, object: string \| null }` (`null`: nothing clear in view) |
 
 The suggestions that follow are the ordinary `suggestions` event under a new `turnId`.
 
 ### Gateway → model service
 
-| Endpoint | Request | Response |
-|---|---|---|
-| `POST /look` | multipart `image`, `locale?` | `{ object: string \| null, ms }` |
-| `POST /suggest` | existing body + `target?: string` | unchanged |
+| Endpoint        | Request                           | Response                         |
+| --------------- | --------------------------------- | -------------------------------- |
+| `POST /look`    | multipart `image`, `locale?`      | `{ object: string \| null, ms }` |
+| `POST /suggest` | existing body + `target?: string` | unchanged                        |
 
 ### State machine
 
@@ -76,8 +76,8 @@ New input `Looked`: `LISTENING → SUGGESTING` and `CHOOSING → SUGGESTING` (a 
 
 ### Dev 3: model service
 
-- `POST /look`: one Gemma call with the image and a short prompt: *"Name the single object at the center of this photo in 1–4 words (for example 'glass of water', 'TV remote'). If nothing is clear, answer NONE."* Then normalize the answer (lowercase, strip punctuation, NONE → `null`).
-- `/suggest` with `target`: add one line to the prompt, *"The user is looking at: {target}. Most replies should be requests or comments about it."* Keep the prompt short so latency holds.
+- `POST /look`: one Gemma call with the image and a short prompt: _"Name the single object at the center of this photo in 1–4 words (for example 'glass of water', 'TV remote'). If nothing is clear, answer NONE."_ Then normalize the answer (lowercase, strip punctuation, NONE → `null`).
+- `/suggest` with `target`: add one line to the prompt, _"The user is looking at: {target}. Most replies should be requests or comments about it."_ Keep the prompt short so latency holds.
 - `mocks/mock-models`: `/look` returns a canned object after a configurable delay.
 - **Measure:** `/look` p50 and p95 on the 3080 for a 512 px JPEG, with Gemma warm; write to `docs/latency.md`.
 
@@ -92,8 +92,9 @@ New input `Looked`: `LISTENING → SUGGESTING` and `CHOOSING → SUGGESTING` (a 
 
 ### Dev 1: headset
 
-- **Trigger:** dwell the reticle on empty space (not on a UI target) for 1.2 s. That fills a different ring from the selection dwell. Also a "What's this?" button for hand users. Never capture continuously.
-- **Capture:** reuse the spike code: crop, 512 px JPEG, POST. Show a small "Looking…" ring at the reticle.
+- **Trigger:** dwell the reticle on empty space (not on a UI target) for 1.2 s. That fills a different ring from the selection dwell. Also a "What's this?" button for hand users. With a controller (or a hand ray), point the ray at something that isn't a UI target and pull the trigger (pinch). Never capture continuously.
+- **Capture:** reuse the spike code: crop, 512 px JPEG, POST. Show a small "Looking…" ring at the reticle (or at the end of the ray).
+- **Controller crop:** the camera is on the head, but a controller can point anywhere. Turn the ray's direction into the head's frame of reference, project it into the camera image with the camera's field of view, and center the crop there instead of the middle. If the ray points outside the camera's view, show "Turn your head toward it" and skip the capture. The field of view and offset come from the spike's crop check; until it's measured, use the crop center for head-gaze and don't ship controller pointing.
 - **Result:** a label such as "Glass of water" near the reticle for 3 s, then the usual reply bubbles. On `null`, "Couldn't tell what that is."
 - Settings: an on/off toggle for "Look to suggest", stored with the other input settings. Strings in `apps/shared/locales/en.json`.
 
@@ -107,7 +108,7 @@ New input `Looked`: `LISTENING → SUGGESTING` and `CHOOSING → SUGGESTING` (a 
 
 1. Test bench → real gateway → 3080, with a photo of a glass of water: label and three requests within the latency target.
 2. Quest 3S end to end on the hotspot, against three real objects (cup, remote, blanket).
-3. Add a demo step to `docs/demo-script.md`: *"The patient looks at the water glass on the table; 'Can you hand me the water?' appears; they pinch it; the phone says it in their voice."*
+3. Add a demo step to `docs/demo-script.md`: _"The patient looks at the water glass on the table; 'Can you hand me the water?' appears; they pinch it; the phone says it in their voice."_
 
 **Latency target (design, not measured):** dwell complete → suggestions shown in under 3 s. Budget: capture and encode 100 ms, upload 100 ms, `/look` ≤ 1.2 s, `/suggest` 0.4 s, first suggestion clip ≤ 1.2 s.
 
@@ -127,16 +128,17 @@ If the spike fails on the Quest 3S:
 
 ## Risks
 
-| Risk | Mitigation |
-|---|---|
-| Camera stream stops inside an AR session | Spike checks this first; fallback 1 |
-| Camera image is offset from the user's gaze | Crop generously (center 40%); the label tells the user what was recognized |
-| Gemma names the wrong object | Show the label so the user can see the guess; looking again replaces it |
-| VRAM on the 3080 (Gemma + STT + TTS is about 250 MB from full) | Vision runs in the same Gemma process; measure peak VRAM during `/look` before the demo |
-| `/look` too slow | Smaller crop (384 px); keep Gemma warm; show the label before suggestions |
+| Risk                                                           | Mitigation                                                                                           |
+| -------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------- |
+| Camera stream stops inside an AR session                       | Spike checks this first; fallback 1                                                                  |
+| Camera image is offset from the user's gaze                    | Crop generously (center 40%); the label tells the user what was recognized                           |
+| Controller ray points at something outside the camera's view   | Project the ray into the camera image; outside it, ask the user to turn their head rather than guess |
+| Gemma names the wrong object                                   | Show the label so the user can see the guess; looking again replaces it                              |
+| VRAM on the 3080 (Gemma + STT + TTS is about 250 MB from full) | Vision runs in the same Gemma process; measure peak VRAM during `/look` before the demo              |
+| `/look` too slow                                               | Smaller crop (384 px); keep Gemma warm; show the label before suggestions                            |
 
 ## Open questions
 
-- The trigger: dwell on empty space, a button, or both? (Proposed: both.)
+- The trigger: dwell on empty space, a button, a controller trigger, or all three? (Proposed: all three, behind the one "Look to suggest" toggle.)
 - Should a look also work while the user is choosing, or only while listening? (Proposed: both, replacing the current replies.)
 - Does `target` stay for the next spoken turn (30 s), or only for the look turn? (Proposed: 30 s.)
