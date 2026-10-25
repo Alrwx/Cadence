@@ -105,11 +105,11 @@ func (o *Orchestrator) recordSince(sessionID, name string, start time.Time, deta
 	o.record(sessionID, name, time.Since(start).Milliseconds(), detail)
 }
 
-// recordTurn queues a turn row. The store keeps the text only with an active store_chat consent.
-func (o *Orchestrator) recordTurn(sessionID, speaker, text string) {
+// recordTurn queues a turn row, which holds no text.
+func (o *Orchestrator) recordTurn(sessionID, speaker string) {
 	ts := time.Now().UnixMilli()
 	o.writer.enqueue("turn", func(ctx context.Context) error {
-		return o.store.AddTurn(ctx, sessionID, o.personID, speaker, text, ts)
+		return o.store.AddTurn(ctx, sessionID, o.personID, speaker, ts)
 	})
 }
 
@@ -178,11 +178,11 @@ func markWaited(ctx context.Context) {
 }
 
 // spoken records the metrics for one reply that was just sent to the phone, plus its turn row.
-func (o *Orchestrator) spoken(sessionID, source, text string, selectedAt time.Time, tag *ttsTag) {
+func (o *Orchestrator) spoken(sessionID, source string, selectedAt time.Time, tag *ttsTag) {
 	clip := "cached"
 	if tag != nil && tag.waited {
 		clip = "synthesized"
 	}
 	o.recordSince(sessionID, metricSelectToPlay, selectedAt, source+":"+clip)
-	o.recordTurn(sessionID, "user", text)
+	o.recordTurn(sessionID, "user")
 }

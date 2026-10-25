@@ -1,5 +1,5 @@
 // Package models is the gateway's client for the Python model service (AGENTS(GH).md §6.2).
-// The gateway owns timeouts: /suggest 3 s, /tts 6 s.
+// The gateway owns timeouts: /suggest 3 s, /tts 6 s, /summarize 12 s.
 package models
 
 import (
@@ -16,6 +16,8 @@ import (
 const (
 	SuggestTimeout = 3 * time.Second
 	TTSTimeout     = 6 * time.Second
+	// Just over the model service's own 10 s Ollama timeout, so its error comes back rather than a bare cancel.
+	SummarizeTimeout = 12 * time.Second
 )
 
 type Client struct {
@@ -44,11 +46,13 @@ type ContextItem struct {
 }
 
 type SuggestRequest struct {
-	TurnID  string        `json:"turnId"`
-	History []Turn        `json:"history"`
-	Style   Style         `json:"style"`
-	Context []ContextItem `json:"context,omitempty"`
-	N       int           `json:"n"`
+	TurnID   string        `json:"turnId"`
+	History  []Turn        `json:"history"`
+	Style    Style         `json:"style"`
+	Context  []ContextItem `json:"context,omitempty"`
+	Memories []string      `json:"memories,omitempty"`
+	Locale   string        `json:"locale,omitempty"`
+	N        int           `json:"n"`
 }
 
 type Suggestion struct {
@@ -81,6 +85,17 @@ func (c *Client) Suggest(ctx context.Context, req SuggestRequest) (SuggestRespon
 	var resp SuggestResponse
 	err := c.do(ctx, http.MethodPost, "/suggest", req, &resp)
 	return resp, err
+}
+
+// Summarize returns a short summary of turns that keeps names, numbers, times and instructions as said.
+func (c *Client) Summarize(ctx context.Context, turns []Turn, locale string) (string, error) {
+	ctx, cancel := context.WithTimeout(ctx, SummarizeTimeout)
+	defer cancel()
+	var resp struct {
+		Summary string `json:"summary"`
+	}
+	err := c.do(ctx, http.MethodPost, "/summarize", map[string]any{"turns": turns, "locale": locale}, &resp)
+	return resp.Summary, err
 }
 
 // TTS returns WAV bytes for text in the given voice and locale. A voiceId the model service doesn't know
