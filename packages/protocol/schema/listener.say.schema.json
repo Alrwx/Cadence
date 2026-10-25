@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "listener.say",
+  "description": "Dev tools: what the other person said, typed instead of spoken. The gateway handles it like a final transcript from speech-to-text. Only accepted when the gateway runs with DEV_TOOLS on (the default for `make gateway`, off for `make demo`).",
+  "x-direction": "phone or headset → gateway",
+  "type": "object",
+  "properties": {
+    "text": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "text"
+  ],
+  "additionalProperties": false
+}

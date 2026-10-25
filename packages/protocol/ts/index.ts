@@ -82,6 +82,11 @@ export interface InstantData {
   phraseId: string;
 }
 
+/** Dev tools: what the other person said, typed instead of spoken. The gateway handles it like a final transcript from speech-to-text. Only accepted when the gateway runs with DEV_TOOLS on (the default for `make gateway`, off for `make demo`). (phone or headset → gateway) */
+export interface ListenerSayData {
+  text: string;
+}
+
 export interface MemoriesItem {
   id: string;
   summary: string;
@@ -217,6 +222,7 @@ export const EVENT_TYPES = [
   "error",
   "hello",
   "instant",
+  "listener.say",
   "memories",
   "memory.delete",
   "memory.save",
@@ -254,6 +260,7 @@ export interface EventDataMap {
   "error": ErrorData;
   "hello": HelloData;
   "instant": InstantData;
+  "listener.say": ListenerSayData;
   "memories": MemoriesData;
   "memory.delete": MemoryDeleteData;
   "memory.save": MemorySaveData;

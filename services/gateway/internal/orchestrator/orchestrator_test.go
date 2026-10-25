@@ -691,3 +691,78 @@ func TestSetVoiceRewarmsAndSpeaksInTheNewVoice(t *testing.T) {
 		t.Fatal("re-setting the same voice synthesized clips again")
 	}
 }
+
+// TestListenerSayStandsInForSpeech: with dev tools on, a typed listener line behaves like a final transcript
+// (caption, new turn, suggestions); lines that can't be used get an error back to the sender, not silence.
+func TestListenerSayStandsInForSpeech(t *testing.T) {
+	fm := &fakeModels{}
+	o := newTestOrchestrator(t, fm)
+	o.DevTools = true
+	srv := httptest.NewServer(hub.New(o))
+	t.Cleanup(srv.Close)
+	headset := dial(t, srv.URL, "headset")
+	phone := dial(t, srv.URL, "phone")
+	var errData protocol.ErrorData
+
+	// Before Start the gateway isn't listening, so the tester is told to tap Start.
+	headset.send(protocol.TypeListenerSay, protocol.ListenerSayData{Text: "Hello there"})
+	headset.expect(protocol.TypeError, &errData, nil)
+	if errData.Code != "not_listening" || !errData.Recoverable {
+		t.Fatalf("before Start: error = %+v", errData)
+	}
+
+	phone.send(protocol.TypePhoneUnlock, protocol.PhoneUnlockData{})
+	phone.expectState("LISTENING")
+
+	headset.send(protocol.TypeListenerSay, protocol.ListenerSayData{Text: "   "})
+	headset.expect(protocol.TypeError, &errData, nil)
+	if errData.Code != "empty_text" {
+		t.Fatalf("blank text: error = %+v", errData)
+	}
+	headset.send(protocol.TypeListenerSay, protocol.ListenerSayData{Text: strings.Repeat("a", maxListenerSay+1)})
+	headset.expect(protocol.TypeError, &errData, nil)
+	if errData.Code != "text_too_long" {
+		t.Fatalf("long text: error = %+v", errData)
+	}
+
+	headset.send(protocol.TypeListenerSay, protocol.ListenerSayData{Text: "  Do you want   some water? "})
+	var final protocol.TranscriptFinalData
+	phone.expect(protocol.TypeTranscriptFinal, &final, nil)
+	if final.Text != "Do you want some water?" || final.Speaker != "other" {
+		t.Fatalf("caption = %+v", final)
+	}
+	var sugg protocol.SuggestionsData
+	headset.expect(protocol.TypeSuggestions, &sugg, nil)
+	if len(sugg.Items) != 3 {
+		t.Fatalf("suggestions = %+v", sugg.Items)
+	}
+	reqs := fm.suggestRequests()
+	if len(reqs) == 0 {
+		t.Fatal("no /suggest call for the typed line")
+	}
+	if h := reqs[len(reqs)-1].History; len(h) == 0 || h[len(h)-1].Text != "Do you want some water?" {
+		t.Fatalf("/suggest history doesn't end with the typed line: %+v", h)
+	}
+
+	// While a reply is being chosen, a new line is only captioned, and the tester is told so.
+	headset.expectState("CHOOSING")
+	headset.send(protocol.TypeListenerSay, protocol.ListenerSayData{Text: "Are you sure?"})
+	headset.expect(protocol.TypeError, &errData, nil)
+	if errData.Code != "caption_only" {
+		t.Fatalf("while choosing: error = %+v", errData)
+	}
+}
+
+func TestListenerSayOffWithoutDevTools(t *testing.T) {
+	fm := &fakeModels{}
+	_, headset, _ := pairedSession(t, fm) // DevTools defaults to off, as in `make demo`
+	headset.send(protocol.TypeListenerSay, protocol.ListenerSayData{Text: "Do you want some water?"})
+	var errData protocol.ErrorData
+	headset.expect(protocol.TypeError, &errData, nil)
+	if errData.Code != "dev_tools_off" {
+		t.Fatalf("error = %+v", errData)
+	}
+	if n := len(fm.suggestRequests()); n != 0 {
+		t.Fatalf("typed line reached /suggest %d times with dev tools off", n)
+	}
+}
