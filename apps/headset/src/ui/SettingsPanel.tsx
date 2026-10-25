@@ -1,4 +1,4 @@
-// Input mode and dwell time. Every control works by hand and by head, except switching to hands-only,
+// Input mode, dwell time, and glass or solid buttons. Every control works by hand and by head, except switching to hands-only,
 // which a user who can't pinch must not be able to trigger by looking.
 import { Text } from "@react-three/drei";
 import { useEffect, useState } from "react";
@@ -22,6 +22,7 @@ const LABEL_X = -0.47;
 export function SettingsPanel({ onClose }: { onClose: () => void }) {
   const mode = useSettings((s) => s.inputMode);
   const dwellMs = useSettings((s) => s.dwellMs);
+  const solid = useSettings((s) => s.solidPanels);
   const row = layout.buttonHeight + 0.03;
 
   return (
@@ -53,9 +54,26 @@ export function SettingsPanel({ onClose }: { onClose: () => void }) {
           onPress={() => useSettings.setState({ dwellMs: ms })}
         />
       ))}
-      <MemoriesRow y={-2 * row} />
-      <ListenerRow y={-3 * row} />
-      <Button3D label={t("settings.done")} width={0.2} color="#2b5d9c" position={[0, -4 * row, 0]} onPress={onClose} />
+      <Text position={[LABEL_X, -2 * row, 0]} fontSize={layout.fontSize} anchorX="left" color="white">
+        {t("settings.panels")}
+      </Text>
+      <Button3D
+        label={t("settings.glass")}
+        width={0.12}
+        color={!solid ? ACTIVE : IDLE}
+        position={[-0.14, -2 * row, 0]}
+        onPress={() => useSettings.setState({ solidPanels: false })}
+      />
+      <Button3D
+        label={t("settings.solid")}
+        width={0.16}
+        color={solid ? ACTIVE : IDLE}
+        position={[0.01, -2 * row, 0]}
+        onPress={() => useSettings.setState({ solidPanels: true })}
+      />
+      <MemoriesRow y={-3 * row} />
+      <ListenerRow y={-4 * row} />
+      <Button3D label={t("settings.done")} width={0.2} color="#2b5d9c" position={[0, -5 * row, 0]} onPress={onClose} />
     </group>
   );
 }

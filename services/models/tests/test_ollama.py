@@ -66,6 +66,15 @@ def test_prompt_includes_history_style_context_memories_and_language():
         assert part in prompt
 
 
+def test_prompt_singles_out_the_last_line_so_a_topic_change_is_followed():
+    fake = FakeOllama()
+    s = OllamaSuggest("m", "http://x", post=fake)
+    history = [Turn(speaker="other", text="Soup or salad?"), Turn(speaker="other", text="How's your pain?")]
+    s.suggest(history, Style(phrases=[]), [], [], "en", 3)
+    prompt = fake.bodies[0][1]["messages"][0]["content"]
+    assert "every reply must respond to:\nother: How's your pain?" in prompt
+
+
 def test_bad_output_is_retried_once():
     fake = FakeOllama("Sure! Here you go", json.dumps(REPLIES))
     assert len(suggest(OllamaSuggest("m", "http://x", post=fake))) == 3

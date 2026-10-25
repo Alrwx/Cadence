@@ -94,6 +94,7 @@ class OllamaSuggest:
         return self.prompt.format(
             n=n,
             history="\n".join(f"{t.speaker}: {t.text}" for t in history[-8:]),
+            last=f"{history[-1].speaker}: {history[-1].text}" if history else "(nothing yet)",
             tone=style.tone or "plain and friendly",
             phrases=lines(style.phrases),
             context=lines([f"{c.label}: {c.summary}" for c in context]),
