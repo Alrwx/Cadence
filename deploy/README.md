@@ -94,7 +94,7 @@ To go back to the synthetic voice, clear those two lines and restart again. Keep
 
 - Headset: `https://debian.tailbcbf3f.ts.net:8443/headset/?session=demo`
 - Phone: `https://debian.tailbcbf3f.ts.net:8443/phone/?session=demo`
-- Test bench (no Quest needed): `https://debian.tailbcbf3f.ts.net:8443/phone/test.html?session=demo`. This is the phone page next to a clickable stand-in headset, and you can type what the listener said. Typing needs `DEV_TOOLS=1`, which is the default.
+- Test bench (no Quest needed): `https://debian.tailbcbf3f.ts.net:8443/phone/test.html`. This is the phone page next to a clickable stand-in headset, and you can type what the listener said. Typing needs `DEV_TOOLS=1`, which is the default. It runs on session `testbench`, not `demo`: on the real devices' session it would take over their connections. Language and the cloned voice are shared by every session, so changing them on the bench changes them on the real devices too.
 
 Use the same `?session=<id>` on both to pair them; it defaults to `demo`. Pick your own id if someone else is testing at the same time.
 
