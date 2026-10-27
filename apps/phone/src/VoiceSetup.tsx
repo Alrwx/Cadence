@@ -242,7 +242,11 @@ function RecordStep({
     if (!recording) return;
     const started = Date.now();
     const timer = setInterval(() => setElapsed(Math.floor((Date.now() - started) / 1000)), 250);
-    return () => clearInterval(timer);
+    return () => {
+      clearInterval(timer);
+      // Cancel closes the sheet mid-recording; without this the mic stays open until the 30 s limit.
+      recording.stop();
+    };
   }, [recording]);
 
   const record = async () => {
