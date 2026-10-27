@@ -1,7 +1,7 @@
 // A stand-in headset for desktop testing: the same shared client and store the real headset uses,
 // connected as role=headset, with every event in and out kept for the log.
 import type { CadenceEvent, ErrorData, EventDataMap, EventType } from "@cadence/protocol";
-import { createCadenceStore, GatewayConnection, sessionIdFromUrl } from "@cadence/shared";
+import { createCadenceStore, GatewayConnection } from "@cadence/shared";
 import { createStore } from "zustand/vanilla";
 
 export interface LogEntry {
@@ -41,7 +41,9 @@ function record(entry: Omit<LogEntry, "at">): void {
   log.setState((s) => ({ entries: [...s.entries, { ...entry, at: Date.now() }].slice(-MAX_LOG) }));
 }
 
-export const sessionId = sessionIdFromUrl();
+// Not the shared "demo" default: the gateway keeps one socket per role per session, so a bench on the real
+// headset and phone's session would keep kicking them off (and they it).
+export const sessionId = new URLSearchParams(location.search).get("session") || "testbench";
 
 export const connection = new GatewayConnection({
   role: "headset",
