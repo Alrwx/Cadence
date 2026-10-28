@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
-import { enterAR, lookAt, remote, sent, startScenario, targetCenter } from "./harness.ts";
+import { enterAR, lookAt, lookAway, sent, startScenario, targetCenter } from "./harness.ts";
 
 // Presses go through head dwell: the emulated hand ray misses small buttons too often to pinch them reliably.
 // The mock gateway starts every session without store_chat consent and with one memory, mem_visit.
@@ -10,8 +10,6 @@ test.beforeEach(async ({ page }, info) => {
 const sentData = async (page: Page, type: string) => (await sent(page)).filter((e) => e.type === type).map((e) => e.data);
 const labels = (page: Page) => page.evaluate(() => window.cadence.targets().map((t) => t.label));
 const notice = (page: Page) => page.evaluate(() => window.cadence.useView.getState().notice);
-/** A dwell fires once per visit, so pressing the same button again means looking away first. */
-const lookAway = (page: Page) => remote(page, "look_at", { device: "headset", target: { x: 0, y: 3, z: -1 } });
 
 /** Lets the scenario say something, so the mock has a line from the last minute to remember. */
 async function hearSomething(page: Page) {
@@ -20,15 +18,16 @@ async function hearSomething(page: Page) {
 }
 
 async function allowAndRemember(page: Page) {
+  await lookAt(page, "More");
   await lookAt(page, "Remember this");
   await lookAt(page, "Allow and remember");
 }
 
-/** Waits until the Conversations tab is gone: both tabs have Delete and Back buttons. */
+/** Waits for the view's Back, so label checks don't run against the main view. */
 async function openMemories(page: Page) {
-  await lookAt(page, "Conversations");
+  await lookAt(page, "More");
   await lookAt(page, "Memories");
-  await expect.poll(async () => (await labels(page)).includes("Attach")).toBe(false);
+  await targetCenter(page, "Back");
 }
 
 test("without consent, Remember this asks first, and allowing sends the consent before the save", async ({ page }) => {
@@ -70,6 +69,7 @@ test("deleting a memory takes a second press", async ({ page }) => {
 });
 
 test("turning Save memories off takes a second press and deletes every memory", async ({ page }) => {
+  await lookAt(page, "More");
   await lookAt(page, "Settings");
   await lookAt(page, "On");
   await expect.poll(() => sentData(page, "consent.set")).toEqual([{ kind: "store_chat", granted: true }]);
@@ -80,7 +80,7 @@ test("turning Save memories off takes a second press and deletes every memory", 
   await lookAway(page);
   await lookAt(page, "Delete all?");
   await expect.poll(async () => (await sentData(page, "consent.set")).at(-1)).toEqual({ kind: "store_chat", granted: false });
-  await lookAt(page, "Done");
+  await lookAt(page, "Back");
   await openMemories(page);
   expect(await labels(page)).not.toContain("Delete");
 });

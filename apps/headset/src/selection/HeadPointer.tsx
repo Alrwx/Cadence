@@ -3,6 +3,7 @@ import { createPortal, useFrame, useThree } from "@react-three/fiber";
 import { useEffect, useRef } from "react";
 import { Quaternion, Vector3, type Mesh } from "three";
 import { selection } from "../config.ts";
+import { ACCENT } from "../ui/glass.ts";
 import { headEnabled, useSettings } from "../settings.ts";
 import { DwellTracker, pickTarget, type Rect } from "./dwell.ts";
 import { dwellProgress, dwellTargets, useHeadHover, type DwellTarget } from "./targets.ts";
@@ -10,6 +11,7 @@ import { dwellProgress, dwellTargets, useHeadHover, type DwellTarget } from "./t
 const DEG = Math.PI / 180;
 const RING_OUTER = 0.012;
 const RING_INNER = 0.009;
+const ARC_SEGMENTS = 64;
 
 export function HeadPointer() {
   const mode = useSettings((s) => s.inputMode);
@@ -20,7 +22,7 @@ function Reticle() {
   const { camera, scene } = useThree();
   const tracker = useRef(new DwellTracker());
   const lastIds = useRef(new Set<string>());
-  const fill = useRef<Mesh>(null);
+  const arc = useRef<Mesh>(null);
 
   // The reticle is a child of the camera so it moves with the head in the same frame; the camera has to be
   // in the scene for its children to render.
@@ -57,7 +59,8 @@ function Reticle() {
     if (useHeadHover.getState().id !== update.hover) useHeadHover.setState({ id: update.hover });
     Object.assign(dwellProgress, { id: update.hover, value: update.progress });
     if (update.fired) dwellTargets.get(update.fired)?.press();
-    fill.current?.scale.setScalar(Math.max(update.progress, 1e-3));
+    // Each ring segment is 6 indices, so the draw range shows the arc up to the progress.
+    arc.current?.geometry.setDrawRange(0, 6 * Math.round(update.progress * ARC_SEGMENTS));
   });
 
   return createPortal(
@@ -66,9 +69,10 @@ function Reticle() {
         <ringGeometry args={[RING_INNER, RING_OUTER, 32]} />
         <meshBasicMaterial color="white" depthTest={false} transparent opacity={0.9} />
       </mesh>
-      <mesh ref={fill} renderOrder={1001}>
-        <circleGeometry args={[RING_INNER, 32]} />
-        <meshBasicMaterial color="#7fd1ff" depthTest={false} transparent opacity={0.9} />
+      {/* Mirrored, so the arc runs clockwise from the top. */}
+      <mesh ref={arc} renderOrder={1001} scale={[-1, 1, 1]}>
+        <ringGeometry args={[RING_INNER, RING_OUTER, ARC_SEGMENTS, 1, Math.PI / 2]} />
+        <meshBasicMaterial color={ACCENT} depthTest={false} transparent opacity={0.95} />
       </mesh>
     </group>,
     camera,

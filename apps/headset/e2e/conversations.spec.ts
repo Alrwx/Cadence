@@ -1,18 +1,17 @@
 import { expect, test, type Page } from "@playwright/test";
-import { enterAR, lookAt, remote, sent, targetCenter } from "./harness.ts";
+import { enterAR, lookAt, lookAway, sent, targetCenter } from "./harness.ts";
 
 // Presses go through head dwell: the emulated hand ray misses small buttons too often to pinch them reliably.
 // The mock gateway starts every session with one saved conversation, cv_lee.
 test.beforeEach(async ({ page }, info) => {
   await enterAR(page, info.testId, "head");
+  await lookAt(page, "More");
   await lookAt(page, "Conversations");
   await targetCenter(page, "Attach");
 });
 
 const sentData = async (page: Page, type: string) => (await sent(page)).filter((e) => e.type === type).map((e) => e.data);
 const labels = (page: Page) => page.evaluate(() => window.cadence.targets().map((t) => t.label));
-/** A dwell fires once per visit, so pressing the same button again means looking away first. */
-const lookAway = (page: Page) => remote(page, "look_at", { device: "headset", target: { x: 0, y: 3, z: -1 } });
 
 test("saving sends a dated label and the new conversation is listed", async ({ page }) => {
   await lookAt(page, "Doctor");
@@ -24,7 +23,7 @@ test("attach and detach each send the whole attached set", async ({ page }) => {
   await lookAt(page, "Attach");
   await expect.poll(() => sentData(page, "conversation.attach")).toEqual([{ conversationIds: ["cv_lee"] }]);
   await lookAway(page);
-  await lookAt(page, "✓ Attached");
+  await lookAt(page, "Attached");
   await expect
     .poll(() => sentData(page, "conversation.attach"))
     .toEqual([{ conversationIds: ["cv_lee"] }, { conversationIds: [] }]);
@@ -41,24 +40,21 @@ test("deleting takes a second press", async ({ page }) => {
   await expect.poll(async () => (await labels(page)).includes("Attach")).toBe(false);
 });
 
-test("Main menu in the top bar leads back home", async ({ page }) => {
-  await lookAt(page, "Main menu");
-  await expect.poll(async () => (await labels(page)).includes("Saved phrases")).toBe(true);
-  expect(await labels(page)).not.toContain("Main menu");
+test("Back leads home", async ({ page }) => {
+  await lookAt(page, "Back");
+  await expect.poll(async () => (await labels(page)).includes("Phrases")).toBe(true);
+  expect(await labels(page)).not.toContain("Back");
 });
 
-test("Reset conversation takes a second press, then detaches what was attached", async ({ page }) => {
+test("Conversation shift resets in one press and detaches what was attached", async ({ page }) => {
   await lookAt(page, "Attach");
-  await targetCenter(page, "✓ Attached");
-  await lookAt(page, "Main menu");
-  await lookAt(page, "Reset conversation");
-  await targetCenter(page, "Really reset?");
-  await page.waitForTimeout(1200);
-  expect(await sentData(page, "conversation.reset")).toEqual([]);
-  await lookAway(page);
-  await lookAt(page, "Really reset?");
+  await targetCenter(page, "Attached");
+  await lookAt(page, "Back");
+  await lookAt(page, "More");
+  await lookAt(page, "Conversation shift");
   await expect.poll(() => sentData(page, "conversation.reset")).toEqual([{}]);
+  await lookAt(page, "More");
   await lookAt(page, "Conversations");
   await targetCenter(page, "Attach");
-  expect(await labels(page)).not.toContain("✓ Attached");
+  expect(await labels(page)).not.toContain("Attached");
 });

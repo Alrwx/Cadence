@@ -1,8 +1,9 @@
 // Dev server only, before the app renders.
 import { Vector3 } from "three";
+import { useConsent } from "../consent.ts";
 import { useListener } from "../layout/ListenerAnchor.tsx";
 import { useRecenter } from "../layout/UIAnchor.tsx";
-import { dwellTargets } from "../selection/targets.ts";
+import { dwellTargets, useHeadHover } from "../selection/targets.ts";
 import { store, useHeadset } from "../session.ts";
 import { useSettings } from "../settings.ts";
 import { useView } from "../ui/views.ts";
@@ -20,6 +21,7 @@ export async function setupDev(): Promise<void> {
       useHeadset,
       useSettings,
       useRecenter,
+      useConsent,
       useListener,
       useView,
       xrStore,
@@ -27,6 +29,11 @@ export async function setupDev(): Promise<void> {
       /** Every pressable button: its label and world-space center. */
       targets: () =>
         [...dwellTargets.values()].map((t) => ({ label: t.label, center: t.object.getWorldPosition(new Vector3()) })),
+      /** The label of the button the head reticle rests on, if any. */
+      hovered: () => {
+        const { id } = useHeadHover.getState();
+        return (id && dwellTargets.get(id)?.label) ?? null;
+      },
     },
   });
 }

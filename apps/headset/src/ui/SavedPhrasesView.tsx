@@ -1,4 +1,4 @@
-// Saved phrases: a tab per group and big phrase buttons a page at a time. A phrase speaks as-is, or,
+// Saved phrases: a chip per group and big phrase tiles a page at a time. A phrase speaks as-is, or,
 // after "Edit first", opens in the compose keyboard. Adding and organizing phrases happens on the phone.
 import { Text } from "@react-three/drei";
 import type { PhrasesGroup } from "@cadence/protocol";
@@ -7,19 +7,25 @@ import { layout } from "../config.ts";
 import { rememberSpeech, send, useCadence } from "../session.ts";
 import { t } from "../strings.ts";
 import { Button3D } from "./Button3D.tsx";
-import { showView, startCompose, useView } from "./views.ts";
+import { BackButton, HEADER_Y, Pager } from "./controls.tsx";
+import { ignoreRays } from "./glass.ts";
+import { startCompose, useView } from "./views.ts";
 
-const TABS_Y = 0.12;
-const GRID_TOP = 0.035;
-const ROW = 0.085;
 const COLUMNS = 2;
 const PAGE_SIZE = 6;
-const PHRASE_WIDTH = 0.44;
-const ACTIONS_Y = -0.225;
-const TAB = "#5a4a2a";
-const ACTIVE = "#b07a1f";
-const PHRASE = "#8a6a2a";
-const ACTION = "#3d4a5c";
+const TILE_WIDTH = 0.34;
+const TILE_HEIGHT = 0.088;
+const TILE_RADIUS = 0.028;
+const COLUMN_X = 0.177;
+const TOP_ROW_Y = 0.236;
+const ROW_STEP = 0.108;
+const MIDDLE_ROW_Y = TOP_ROW_Y - ROW_STEP;
+const PAGER_X = 0.402;
+const DOTS_Y = -0.049;
+const EDIT_Y = -0.105;
+const CHIP_HEIGHT = 0.05;
+const CHIP_FONT = 0.019;
+const CHIP_GAP = 0.012;
 
 export function SavedPhrasesView() {
   const groups = useCadence((s) => s.phraseGroups);
@@ -40,9 +46,10 @@ export function SavedPhrasesView() {
 
   return (
     <>
-      <GroupTabs groups={groups} activeId={group?.id} onOpen={openGroup} />
+      <BackButton />
+      <GroupChips groups={groups} activeId={group?.id} onOpen={openGroup} />
       {shown.length === 0 && (
-        <Text position={[0, GRID_TOP - ROW, 0]} fontSize={layout.fontSize} color="#9ab">
+        <Text position={[0, MIDDLE_ROW_Y, 0]} fontSize={layout.fontSize} color="white" fillOpacity={0.8} raycast={ignoreRays}>
           {group ? t("saved.empty") : t("saved.noGroups")}
         </Text>
       )}
@@ -50,9 +57,11 @@ export function SavedPhrasesView() {
         <Button3D
           key={item.id}
           label={item.text}
-          width={PHRASE_WIDTH}
-          color={PHRASE}
-          position={[((i % COLUMNS) - (COLUMNS - 1) / 2) * (PHRASE_WIDTH + 0.02), GRID_TOP - Math.floor(i / COLUMNS) * ROW, 0]}
+          width={TILE_WIDTH}
+          height={TILE_HEIGHT}
+          radius={TILE_RADIUS}
+          align="start"
+          position={[((i % COLUMNS) * 2 - 1) * COLUMN_X, TOP_ROW_Y - Math.floor(i / COLUMNS) * ROW_STEP, 0]}
           onPress={() => {
             if (editFirst) return startCompose(item.text);
             rememberSpeech(item.text, false);
@@ -60,32 +69,44 @@ export function SavedPhrasesView() {
           }}
         />
       ))}
-      {pages > 1 && (
-        <>
-          <Button3D label={t("saved.prev")} width={0.1} color={ACTION} disabled={shownPage === 0} position={[-0.56, GRID_TOP - ROW, 0]} onPress={() => setPage(shownPage - 1)} />
-          <Button3D label={t("saved.more")} width={0.1} color={ACTION} disabled={shownPage === pages - 1} position={[0.56, GRID_TOP - ROW, 0]} onPress={() => setPage(shownPage + 1)} />
-        </>
-      )}
-      <group position={[0, ACTIONS_Y, 0]}>
-        <Button3D label={t("saved.back")} width={0.2} color={ACTION} position={[-0.15, 0, 0]} onPress={() => showView({ kind: "main" })} />
-        <Button3D
-          label={editFirst ? t("saved.pickToEdit") : t("saved.editFirst")}
-          width={0.2}
-          color={editFirst ? ACTIVE : ACTION}
-          position={[0.15, 0, 0]}
-          onPress={() => setEditFirst(!editFirst)}
-        />
-      </group>
+      <Pager page={shownPage} pages={pages} onPage={setPage} halfSpan={PAGER_X} y={MIDDLE_ROW_Y} dotsY={DOTS_Y} />
+      <Button3D
+        label={editFirst ? t("saved.pickToEdit") : t("saved.editFirst")}
+        icon="pencil"
+        width={editFirst ? 0.25 : 0.2}
+        selected={editFirst}
+        position={[0, EDIT_Y, 0]}
+        onPress={() => setEditFirst(!editFirst)}
+      />
     </>
   );
 }
 
-function GroupTabs({ groups, activeId, onOpen }: { groups: PhrasesGroup[]; activeId: string | undefined; onOpen: (id: string) => void }) {
-  const x = (i: number) => (i - (groups.length - 1) / 2) * 0.17;
+// Troika measures text only after it renders, so a chip's width comes from its name's length.
+const chipWidth = (name: string) => Math.min(0.22, Math.max(0.15, 0.048 + name.length * 0.0105));
+
+function GroupChips({ groups, activeId, onOpen }: { groups: PhrasesGroup[]; activeId: string | undefined; onOpen: (id: string) => void }) {
+  const total = groups.reduce((sum, g) => sum + chipWidth(g.name), 0) + CHIP_GAP * (groups.length - 1);
+  let left = -total / 2;
+  const chips = groups.map((g) => {
+    const width = chipWidth(g.name);
+    const chip = { group: g, width, x: left + width / 2 };
+    left += width + CHIP_GAP;
+    return chip;
+  });
   return (
-    <group position={[0, TABS_Y, 0]}>
-      {groups.map((g, i) => (
-        <Button3D key={g.id} label={g.name} width={0.16} height={0.05} color={g.id === activeId ? ACTIVE : TAB} position={[x(i), 0, 0]} onPress={() => onOpen(g.id)} />
+    <group position={[0, HEADER_Y, 0]}>
+      {chips.map(({ group: g, width, x }) => (
+        <Button3D
+          key={g.id}
+          label={g.name}
+          width={width}
+          height={CHIP_HEIGHT}
+          fontSize={CHIP_FONT}
+          selected={g.id === activeId}
+          position={[x, 0, 0]}
+          onPress={() => onOpen(g.id)}
+        />
       ))}
     </group>
   );

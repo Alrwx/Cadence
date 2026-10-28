@@ -1,30 +1,41 @@
-// The in-headset panel: status line, top bar, and whichever view is showing.
+// The in-headset panel: the status pill, and whichever view is showing.
 import { Text } from "@react-three/drei";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { layout } from "../config.ts";
-import { requestPlaceListener, useListener } from "../layout/ListenerAnchor.tsx";
-import { requestRecenter, useRecenter } from "../layout/UIAnchor.tsx";
+import { useListener } from "../layout/ListenerAnchor.tsx";
+import { useRecenter } from "../layout/UIAnchor.tsx";
 import { useCadence, useHeadset } from "../session.ts";
 import { t } from "../strings.ts";
-import { Button3D } from "./Button3D.tsx";
 import { ConsentView } from "./ConsentView.tsx";
 import { ConversationsView } from "./ConversationsView.tsx";
+import { ACCENT, TEXT_HALO, ignoreRays } from "./glass.ts";
+import { GlassPanel } from "./GlassPanel.tsx";
+import { Icon3D } from "./Icon3D.tsx";
 import { MainView } from "./MainView.tsx";
 import { MemoriesView } from "./MemoriesView.tsx";
 import { SavedPhrasesView } from "./SavedPhrasesView.tsx";
 import { SettingsPanel } from "./SettingsPanel.tsx";
 import { TextEntryView } from "./TextEntryView.tsx";
-import { notify, showView, useView } from "./views.ts";
+import { notify, useConsentAtStart, useView } from "./views.ts";
 
 // Tilted back so the panel faces the eyes from below the line of sight.
 const PANEL_TILT = Math.atan2(layout.panelOffset[1], -layout.panelOffset[2]);
-const QUIET = "#3d4a5c";
-const ACTIVE = "#b07a1f";
+
+/** On the main view the status sits between the replies and the instant row; elsewhere, above the header. */
+const STATUS_MAIN_Y = 0.139;
+const STATUS_Y = 0.41;
+const STATUS_HEIGHT = 0.052;
+const STATUS_FONT = 0.019;
+const STATUS_MAX_TEXT = 0.78;
+const STATUS_PAD = 0.024;
+const MIC = 0.022;
+const MIC_GAP = 0.01;
 
 export function Panels() {
   const sessionState = useCadence((s) => s.state);
   const view = useView((s) => s.view);
   const error = useCadence((s) => s.lastError);
+  useConsentAtStart();
 
   useEffect(() => {
     if (error) notify(error.message, "error");
@@ -35,73 +46,19 @@ export function Panels() {
   else if (view.kind === "saved") content = <SavedPhrasesView />;
   else if (view.kind === "conversations") content = view.tab === "memories" ? <MemoriesView /> : <ConversationsView />;
   else if (view.kind === "consent") content = <ConsentView />;
-  else if (view.kind === "settings") content = <SettingsPanel onClose={() => showView({ kind: "main" })} />;
+  else if (view.kind === "settings") content = <SettingsPanel />;
   else content = <MainView />;
 
-  const showTopBar = sessionState !== "COMPOSING" && view.kind !== "settings";
-  // Each view's own Back sits low, often below the field of view, so the way home is always up here too.
-  const showHome = sessionState !== "COMPOSING" && view.kind !== "main";
+  const onMain = sessionState !== "COMPOSING" && view.kind === "main";
   return (
     <group position={layout.panelOffset} rotation={[PANEL_TILT, 0, 0]}>
-      <StatusLine />
-      {showTopBar && <ListenerPrompt />}
-      {/* Clear of Recenter and Conversations, and nothing takes its spot on the main view, so a dwell can't carry over. */}
-      {showHome && (
-        <Button3D label={t("top.home")} width={0.16} height={0.045} color={QUIET} position={[-0.2, 0.27, 0]} onPress={() => showView({ kind: "main" })} />
-      )}
-      {showTopBar && (
-        <>
-          <Button3D label={t("top.recenter")} width={0.14} height={0.045} color={QUIET} position={[-0.4, 0.27, 0]} onPress={requestRecenter} />
-          <Button3D
-            label={t("top.conversations")}
-            width={0.2}
-            height={0.045}
-            color={view.kind === "conversations" && !view.tab ? ACTIVE : QUIET}
-            position={[0, 0.27, 0]}
-            onPress={() => showView({ kind: "conversations" })}
-          />
-          {/* Beside Conversations, not splitting its spot, so a dwell that just opened it can't land on Memories. */}
-          {view.kind === "conversations" && (
-            <Button3D
-              label={t("memories.tab")}
-              width={0.16}
-              height={0.045}
-              color={view.tab === "memories" ? ACTIVE : QUIET}
-              position={[0.2, 0.27, 0]}
-              onPress={() => showView({ kind: "conversations", tab: "memories" })}
-            />
-          )}
-          <Button3D
-            label={t("top.settings")}
-            width={0.14}
-            height={0.045}
-            color={QUIET}
-            position={[0.4, 0.27, 0]}
-            onPress={() => showView({ kind: "settings" })}
-          />
-        </>
-      )}
+      <StatusPill y={onMain ? STATUS_MAIN_Y : STATUS_Y} />
       {content}
     </group>
   );
 }
 
-/** Asked once per page load; the top bar's gap above keeps a dwell on Recenter or Settings from landing here. */
-function ListenerPrompt() {
-  const prompted = useListener((s) => s.prompted);
-  if (prompted) return null;
-  return (
-    <group position={[0, 0.36, 0]}>
-      <Text position={[-0.12, 0, 0]} fontSize={0.02} anchorX="right" color="#ddd">
-        {t("listener.prompt")}
-      </Text>
-      <Button3D label={t("listener.place")} width={0.2} height={0.045} color="#2e6b7d" position={[0, 0, 0]} onPress={requestPlaceListener} />
-      <Button3D label={t("listener.skip")} width={0.12} height={0.045} color={QUIET} position={[0.18, 0, 0]} onPress={() => useListener.setState({ prompted: true })} />
-    </group>
-  );
-}
-
-function StatusLine() {
+function StatusPill({ y }: { y: number }) {
   const state = useCadence((s) => s.state);
   const partial = useCadence((s) => s.partial);
   const caption = useCadence((s) => s.captions.at(-1) ?? "");
@@ -109,21 +66,49 @@ function StatusLine() {
   const recentering = useRecenter((s) => s.announced);
   const notice = useView((s) => s.notice);
   const placing = useListener((s) => s.at !== null);
+  const [textSize, setTextSize] = useState<[number, number]>([0, 0]);
 
   let text: string;
+  let heard = false;
   if (recentering) text = t("status.recentering");
   else if (placing) text = t("listener.placing");
   else if (notice) text = notice.text;
   else if (state === "SPEAKING" && speaking) text = t("status.speaking", { text: speaking });
-  else if (partial || caption) text = partial || caption;
-  else if (state === "IDLE") text = t("status.idle");
+  else if (partial || caption) {
+    text = partial || caption;
+    heard = true;
+  } else if (state === "IDLE") text = t("status.idle");
   else if (state === "SUGGESTING") text = t("status.suggesting");
   else text = t("status.listening");
 
-  const color = !recentering && !placing && notice?.tone === "error" ? "#ffb4a8" : "#ddd";
+  const color = !recentering && !placing && notice?.tone === "error" ? "#ffb4a8" : "white";
+  const lead = heard ? MIC + MIC_GAP : 0;
+  const [textWidth, textHeight] = textSize;
   return (
-    <Text position={[0, 0.2, 0]} fontSize={0.02} maxWidth={0.9} color={color} anchorY="bottom" textAlign="center">
-      {text}
-    </Text>
+    <GlassPanel
+      width={textWidth + lead + 2 * STATUS_PAD}
+      // A long caption wraps, and the pill grows to hold it.
+      height={Math.max(STATUS_HEIGHT, textHeight + 0.02)}
+      radius={STATUS_HEIGHT / 2}
+      position={[0, y, 0]}
+    >
+      {heard && <Icon3D name="mic" size={MIC} color={ACCENT} position={[-(textWidth + lead) / 2 + MIC / 2, 0, 0.004]} />}
+      <Text
+        raycast={ignoreRays}
+        position={[lead / 2, 0, 0.004]}
+        fontSize={STATUS_FONT}
+        maxWidth={STATUS_MAX_TEXT}
+        textAlign="center"
+        anchorY="middle"
+        color={color}
+        {...TEXT_HALO}
+        onSync={(troika: { textRenderInfo?: { blockBounds: [number, number, number, number] } }) => {
+          const bounds = troika.textRenderInfo?.blockBounds;
+          if (bounds) setTextSize([bounds[2] - bounds[0], bounds[3] - bounds[1]]);
+        }}
+      >
+        {text}
+      </Text>
+    </GlassPanel>
   );
 }

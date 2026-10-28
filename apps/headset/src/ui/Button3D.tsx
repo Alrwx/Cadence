@@ -1,28 +1,49 @@
-// A large pinch/poke target with a text label. Hands, controllers, and the desktop emulator press it by
-// pointer; the head pointer presses it after a dwell, which fills the glass from the bottom as it runs.
+// A large pinch/poke target with a label and an optional icon. Hands, controllers, and the desktop emulator press it
+// by pointer; the head pointer presses it after a dwell, which fills the glass from the bottom as it runs.
 import { Text } from "@react-three/drei";
 import { useFrame } from "@react-three/fiber";
 import { useEffect, useId, useMemo, useRef, useState, type ReactNode } from "react";
-import { MathUtils, type Group, type Mesh } from "three";
+import { Color, MathUtils, type Group, type Mesh } from "three";
 import { layout } from "../config.ts";
 import { dwellProgress, dwellTargets, useHeadHover } from "../selection/targets.ts";
 import { handsEnabled, useSettings } from "../settings.ts";
-import { createGlassMaterial, GLASS_OPACITY, SOLID_OPACITY } from "./glass.ts";
+import { ACCENT, DANGER, DANGER_RIM, GLASS_OPACITY, GLASS_TINT, SOLID_OPACITY, TEXT_HALO, createGlassMaterial, ignoreRays } from "./glass.ts";
+import { Icon3D } from "./Icon3D.tsx";
+import type { IconName } from "./icons.ts";
 
-const RADIUS = 0.014;
 /** Hovered buttons rise toward the user; a held pinch pushes them back (meters). */
 const HOVER_LIFT = 0.008;
 const PINCH_DEPTH = 0.005;
 /** A pinch release still counts as held for this long, in case the hand is lost before the release (ms). */
 const PINCH_HOLD_LIMIT_MS = 2000;
+/** Space between the edge and the content, and between the icon and the label (meters). */
+const PAD = 0.024;
+const ICON_GAP = 0.01;
+/** Icon size relative to the label's font size. */
+const ICON_EM = 1.2;
+/** How much of the accent or danger color covers the body, as in the mockups' CSS color-mix. */
+const ACCENT_SHARE = 0.38;
+const DANGER_SHARE = 0.5;
 
 interface Props {
+  /** Visible text unless `iconOnly`; always the dwell-target name that tests and window.cadence.targets() use. */
   label: string;
   onPress: () => void;
   position?: [number, number, number];
   width?: number;
   height?: number;
-  color?: string;
+  icon?: IconName;
+  /** Shows only the icon, for the universal ones (Back, Close, More, Delete, paging). */
+  iconOnly?: boolean;
+  /** primary: the screen's main action; danger: a second-press confirm; clear: no body unless selected, for options on a tray. */
+  variant?: "glass" | "primary" | "danger" | "clear";
+  /** An on state: accent ring and tint. */
+  selected?: boolean;
+  /** Icon and label centered, or from the left edge. */
+  align?: "center" | "start";
+  /** Corner radius (meters); a pill or circle by default. */
+  radius?: number;
+  fontSize?: number;
   disabled?: boolean;
   /** False for buttons that could lock a hands-free user out (e.g. switching to hands-only input). */
   headSelectable?: boolean;
@@ -36,7 +57,13 @@ export function Button3D({
   position = [0, 0, 0],
   width = layout.buttonWidth,
   height = layout.buttonHeight,
-  color = "#2b5d9c",
+  icon,
+  iconOnly = false,
+  variant = "glass",
+  selected = false,
+  align = "center",
+  radius = height / 2,
+  fontSize = layout.fontSize,
   disabled = false,
   headSelectable = true,
   children,
@@ -53,13 +80,28 @@ export function Button3D({
   const latest = useRef({ onPress, disabled, headSelectable });
   latest.current = { onPress, disabled, headSelectable };
 
-  const material = useMemo(() => createGlassMaterial(width, height, RADIUS), [width, height]);
+  const corner = Math.min(radius, width / 2, height / 2);
+  const material = useMemo(() => createGlassMaterial(width, height, corner), [width, height, corner]);
   useEffect(() => () => material.dispose(), [material]);
   useEffect(() => {
-    material.uniforms.uTint.value.set(disabled ? "#444" : color);
-    material.uniforms.uOpacity.value = solid ? SOLID_OPACITY : disabled ? GLASS_OPACITY * 0.6 : GLASS_OPACITY;
-    material.uniforms.uSheen.value = solid ? 0 : 1;
-  }, [material, color, disabled, solid]);
+    const u = material.uniforms;
+    const danger = variant === "danger";
+    const share = disabled ? 0 : danger ? DANGER_SHARE : variant === "primary" || selected ? ACCENT_SHARE : 0;
+    const body = variant === "clear" && !selected ? 0 : solid ? SOLID_OPACITY : GLASS_OPACITY;
+    // The colored share is opaque, so it raises the opacity and outweighs the see-through body in the tint.
+    u.uOpacity.value = share + (1 - share) * (disabled && !solid ? body * 0.6 : body);
+    u.uTint.value.copy(mixSRGB(GLASS_TINT, danger ? DANGER : ACCENT, share && share / u.uOpacity.value));
+    u.uRing.value.set(danger ? DANGER_RIM : ACCENT);
+    u.uRingMix.value = share ? 1 : 0;
+    u.uSheen.value = solid ? 0 : 1;
+  }, [material, variant, selected, disabled, solid]);
+
+  const [textWidth, setTextWidth] = useState(0);
+  const iconSize = fontSize * ICON_EM;
+  const lead = icon && !iconOnly ? iconSize + ICON_GAP : 0;
+  const start = align === "start";
+  const textX = start ? -width / 2 + PAD + lead : lead / 2;
+  const iconX = iconOnly ? 0 : start ? -width / 2 + PAD + iconSize / 2 : lead / 2 - textWidth / 2 - ICON_GAP - iconSize / 2;
 
   const press = () => {
     const now = performance.now();
@@ -130,31 +172,43 @@ export function Button3D({
         <planeGeometry args={[width, height]} />
       </mesh>
       <group ref={face}>
+        {icon && <Icon3D name={icon} size={iconSize} opacity={disabled ? 0.55 : 1} position={[iconX, 0, 0.004]} />}
         {/* The label must not catch rays: a pinch on the text would hit it instead of the button. A soft dark
             halo keeps it readable over whatever the glass lets through. */}
-        <Text
-          raycast={ignoreRays}
-          position={[0, 0, 0.004]}
-          fontSize={layout.fontSize}
-          maxWidth={width - 0.03}
-          textAlign="center"
-          anchorX="center"
-          anchorY="middle"
-          color="white"
-          fillOpacity={disabled ? 0.55 : 1}
-          outlineBlur={0.004}
-          outlineColor="black"
-          outlineOpacity={0.5}
-        >
-          {label}
-        </Text>
+        {!iconOnly && (
+          <Text
+            raycast={ignoreRays}
+            position={[textX, 0, 0.004]}
+            fontSize={fontSize}
+            maxWidth={width - 2 * PAD - lead}
+            textAlign={start ? "left" : "center"}
+            anchorX={start ? "left" : "center"}
+            anchorY="middle"
+            color="white"
+            fillOpacity={disabled ? 0.55 : 1}
+            {...TEXT_HALO}
+            // A centered icon sits just left of the text, so it needs the laid-out width.
+            onSync={
+              icon && !start
+                ? (text: { textRenderInfo?: { blockBounds: [number, number, number, number] } }) => {
+                    const bounds = text.textRenderInfo?.blockBounds;
+                    if (bounds) setTextWidth(bounds[2] - bounds[0]);
+                  }
+                : undefined
+            }
+          >
+            {label}
+          </Text>
+        )}
         {children}
       </group>
     </group>
   );
 }
 
-const ignoreRays = () => {};
+/** Mixes two colors the way CSS does, in sRGB rather than three's linear working space. */
+const mixSRGB = (a: string, b: string, t: number) =>
+  new Color(a).convertLinearToSRGB().lerp(new Color(b).convertLinearToSRGB(), t).convertSRGBToLinear();
 
 // Shared across buttons, so a pinch that started on one button and was released elsewhere can't later press it.
 const pinchedOn = new Map<number, string>();

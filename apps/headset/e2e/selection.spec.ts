@@ -56,6 +56,7 @@ test("head-only mode ignores pinches but still selects by looking", async ({ pag
 
 test("looking at Hands in Settings does not switch to hands-only", async ({ page }, info) => {
   await start(page, info.testId, "both");
+  await lookAt(page, "More");
   await lookAt(page, "Settings");
   await lookAt(page, "Hands");
   await page.waitForTimeout(2000);

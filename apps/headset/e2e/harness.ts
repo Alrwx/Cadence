@@ -5,6 +5,7 @@ import type { Page } from "@playwright/test";
 import type { XRStore } from "@react-three/xr";
 import type { XRDevice } from "iwer";
 import { Quaternion, Vector3 } from "three";
+import type { useConsent } from "../src/consent.ts";
 import type { useHeadset } from "../src/session.ts";
 import type { useListener } from "../src/layout/ListenerAnchor.tsx";
 import type { useRecenter } from "../src/layout/UIAnchor.tsx";
@@ -18,24 +19,37 @@ declare global {
       useHeadset: typeof useHeadset;
       useSettings: typeof useSettings;
       useRecenter: typeof useRecenter;
+      useConsent: typeof useConsent;
       useListener: typeof useListener;
       useView: typeof useView;
       xrStore: XRStore;
       emulator: XRDevice;
       targets: () => { label: string; center: Vec3 }[];
+      hovered: () => string | null;
     };
   }
 }
 
 export type Vec3 = { x: number; y: number; z: number };
 
-/** Opens the app on its own mock-gateway session, enters emulated AR, and waits for the UI to settle in front of the head. */
-export async function enterAR(page: Page, session: string, input: InputMode = "hands"): Promise<void> {
+/**
+ * Opens the app on its own mock-gateway session, enters emulated AR, and waits for the UI to settle in front of the head.
+ * Every mock session starts without store_chat consent, so the app asks at start; unless `keepConsentPrompt`, this goes
+ * back to the main view without answering, as a test that isn't about consent would.
+ */
+export async function enterAR(page: Page, session: string, input: InputMode = "hands", { keepConsentPrompt = false } = {}): Promise<void> {
   await page.goto(`/headset/?session=${encodeURIComponent(session)}&input=${input}`);
   await page.waitForFunction(() => window.cadence?.store.getState().connection === "open");
   await page.getByRole("button", { name: "Enter", exact: true }).click();
   await page.waitForFunction(() => !!window.cadence.xrStore.getState().session);
   await page.waitForFunction(() => window.cadence.useRecenter.getState().at === null);
+  if (keepConsentPrompt) return;
+  // A rerun against a still-running mock reuses the session, which may already have consent and so never asks.
+  await page.waitForFunction(() => {
+    const { reported, storeChat } = window.cadence.useConsent.getState();
+    return reported && (storeChat || window.cadence.useView.getState().view.kind === "consent");
+  });
+  await page.evaluate(() => window.cadence.useView.setState({ view: { kind: "main" } }));
 }
 
 export function remote(page: Page, method: string, params: Record<string, unknown>): Promise<unknown> {
@@ -64,7 +78,18 @@ export async function lookAt(page: Page, label: string): Promise<void> {
   const target = await targetCenter(page, label);
   // A button that appears under the gaze never fires, so let the head pointer see it before looking at it.
   await waitFrames(page, 2);
+  // A dwell fires once per visit, and one already under the gaze (say, it appeared there) has had its visit, so
+  // arrive from elsewhere the way a real head would.
+  if ((await page.evaluate(() => window.cadence.hovered())) === label) {
+    await lookAway(page);
+    await waitFrames(page, 2);
+  }
   await remote(page, "look_at", { device: "headset", target });
+}
+
+/** Looks up and away from every panel, so the next look at a button starts a new dwell. */
+export function lookAway(page: Page): Promise<unknown> {
+  return remote(page, "look_at", { device: "headset", target: { x: 0, y: 3, z: -1 } });
 }
 
 /** Angle in degrees between where the head looks and the direction from the head to a button. */
