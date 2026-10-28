@@ -14,6 +14,8 @@ import { xrStore } from "./xr.ts";
 
 export function App() {
   const status = useCadence((s) => s.connection);
+  // Every label comes from t(), which follows the gateway's language event; re-render the scene when it changes.
+  useCadence((s) => s.locale);
   const [sceneReady, setSceneReady] = useState(false);
 
   return (

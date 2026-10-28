@@ -32,6 +32,8 @@ const (
 	TypeError                = "error"
 	TypeHello                = "hello"
 	TypeInstant              = "instant"
+	TypeLanguage             = "language"
+	TypeLanguageSet          = "language.set"
 	TypeListenerSay          = "listener.say"
 	TypeMemories             = "memories"
 	TypeMemoryDelete         = "memory.delete"
@@ -137,6 +139,17 @@ type HelloData struct {
 // InstantData: User fired an instant gesture phrase. (headset → gateway)
 type InstantData struct {
 	PhraseID string `json:"phraseId"`
+}
+
+// LanguageData: The language everything runs in: listening, suggestions, speech, and both UIs. Sent on connect and after any change. supported lists the locales language.set accepts. (gateway → headset, phone)
+type LanguageData struct {
+	Locale    string   `json:"locale"`
+	Supported []string `json:"supported"`
+}
+
+// LanguageSetData: Switch the language. Answered with a language event, or an error when the locale isn't supported. Creating a voice also switches to the language of its clip. (phone or headset → gateway)
+type LanguageSetData struct {
+	Locale string `json:"locale"`
 }
 
 // ListenerSayData: Dev tools: what the other person said, typed instead of spoken. The gateway handles it like a final transcript from speech-to-text. Only accepted when the gateway runs with DEV_TOOLS on (the default for `make gateway`, off for `make demo`). (phone or headset → gateway)
@@ -299,6 +312,10 @@ func NewData(eventType string) (any, bool) {
 		return &HelloData{}, true
 	case TypeInstant:
 		return &InstantData{}, true
+	case TypeLanguage:
+		return &LanguageData{}, true
+	case TypeLanguageSet:
+		return &LanguageSetData{}, true
 	case TypeListenerSay:
 		return &ListenerSayData{}, true
 	case TypeMemories:

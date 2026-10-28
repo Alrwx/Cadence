@@ -22,7 +22,7 @@ import (
 func TestRevokeFallsBackToTheDefaultVoice(t *testing.T) {
 	fm := &fakeModels{}
 	o := newTestOrchestrator(t, fm)
-	vh := &voices.Handler{Store: o.store, Models: o.models, Voices: o, Clips: o.clips, PersonID: o.personID, Locale: o.locale}
+	vh := &voices.Handler{Store: o.store, Models: o.models, Voices: o, Clips: o.clips, PersonID: o.personID, Locales: SupportedLocales}
 	mux := http.NewServeMux()
 	mux.Handle("GET /ws", hub.New(o))
 	mux.HandleFunc("POST /api/consent", vh.Consent)

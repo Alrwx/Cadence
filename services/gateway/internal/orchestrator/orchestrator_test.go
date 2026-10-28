@@ -46,6 +46,8 @@ type fakeModels struct {
 	suggestReqs      []models.SuggestRequest
 	summarizeReqs    [][]models.Turn
 	ttsVoices        map[string]int // /tts calls per voiceId
+	ttsLocales       map[string]string // /tts text -> locale of the last request for it
+	sttLocales       []string          // locale of each /stt dial
 	deletedVoices    []string       // DELETE /voices/{id} calls
 }
 
@@ -78,13 +80,16 @@ func (f *fakeModels) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		f.ttsCalls.Add(1)
 		var req struct {
 			VoiceID string `json:"voiceId"`
+			Text    string `json:"text"`
+			Locale  string `json:"locale"`
 		}
 		_ = json.NewDecoder(r.Body).Decode(&req)
 		f.mu.Lock()
 		if f.ttsVoices == nil {
-			f.ttsVoices = map[string]int{}
+			f.ttsVoices, f.ttsLocales = map[string]int{}, map[string]string{}
 		}
 		f.ttsVoices[req.VoiceID]++
+		f.ttsLocales[req.Text] = req.Locale
 		f.mu.Unlock()
 		if f.missingVoice != "" && req.VoiceID == f.missingVoice {
 			http.Error(w, `{"detail":"unknown voiceId `+req.VoiceID+`"}`, http.StatusNotFound)
@@ -136,6 +141,9 @@ func (f *fakeModels) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		_ = json.NewEncoder(w).Encode(map[string]any{"summary": fakeSummary, "ms": 1})
 	case "/stt":
 		f.sttDials.Add(1)
+		f.mu.Lock()
+		f.sttLocales = append(f.sttLocales, r.URL.Query().Get("locale"))
+		f.mu.Unlock()
 		if f.sttDown {
 			http.Error(w, "loading", http.StatusServiceUnavailable)
 			return
@@ -325,7 +333,7 @@ func TestSavedPhrasesEndToEnd(t *testing.T) {
 	}
 	headset.expect(protocol.TypePhrases, &phrases, func() bool { return allReady(&phrases) })
 	warmed := fm.ttsCalls.Load()
-	if want := int64(len(instantText) + 5); warmed != want {
+	if want := int64(len(instantText["en"]) + 5); warmed != want {
 		t.Fatalf("warm-up made %d TTS calls, want %d (instant + starter phrases)", warmed, want)
 	}
 
@@ -712,7 +720,7 @@ func TestSetVoiceRewarmsAndSpeaksInTheNewVoice(t *testing.T) {
 	headset := dial(t, srv.URL, "headset")
 	var phrases protocol.PhrasesData
 	headset.expect(protocol.TypePhrases, &phrases, func() bool { return allReady(&phrases) })
-	perVoice := len(instantText) + 5 // instant phrases + starter saved phrases
+	perVoice := len(instantText["en"]) + 5 // instant phrases + starter saved phrases
 
 	o.SetVoice("mlx_cloned")
 	headset.expect(protocol.TypePhrases, &phrases, func() bool { return !allReady(&phrases) })

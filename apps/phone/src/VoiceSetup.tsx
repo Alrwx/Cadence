@@ -1,7 +1,7 @@
 // Voice setup, one idea per screen: consent, record (or pick a recording or video), listen back, then create.
 // Lives inside a Sheet.
 import { createConsent, recordingFileName, sessionIdFromUrl, uploadVoice, VIDEO_SAMPLE_SECONDS } from "@cadence/shared";
-import { t } from "@cadence/shared/i18n";
+import { getLocale, LANGUAGES, t, type Locale } from "@cadence/shared/i18n";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { LevelMeter } from "./LevelMeter.tsx";
 import { MAX_SAMPLE_SECONDS, startRecording, type Recording } from "./recorder.ts";
@@ -47,6 +47,8 @@ function dotOf(step: Step): number {
 export function VoiceSetup({ onClose }: { onClose: () => void }) {
   const [step, setStep] = useState<Step>({ kind: "consent" });
   const [dir, setDir] = useState<"forward" | "back">("forward");
+  // The language spoken in the clip. Creating the voice switches the whole app to it.
+  const [clipLocale, setClipLocale] = useState<Locale>(getLocale);
   const sessionId = sessionIdFromUrl();
 
   const go = (next: Step, direction: "forward" | "back" = "forward") => {
@@ -72,6 +74,7 @@ export function VoiceSetup({ onClose }: { onClose: () => void }) {
         sample: sample.blob,
         fileName: sample.fileName,
         transcript: sample.transcript,
+        locale: clipLocale,
       });
       go({ kind: "done" });
     } catch (err) {
@@ -100,7 +103,11 @@ export function VoiceSetup({ onClose }: { onClose: () => void }) {
       <div key={step.kind} className={`step ${dir}`}>
         {step.kind === "consent" && <ConsentStep onConsent={giveConsent} />}
         {step.kind === "record" && (
-          <RecordStep onSample={(sample) => go({ kind: "review", consentId: step.consentId, sample })} />
+          <RecordStep
+            locale={clipLocale}
+            onLocale={setClipLocale}
+            onSample={(sample) => go({ kind: "review", consentId: step.consentId, sample })}
+          />
         )}
         {step.kind === "review" && (
           <ReviewStep
@@ -119,7 +126,7 @@ export function VoiceSetup({ onClose }: { onClose: () => void }) {
         {step.kind === "done" && (
           <Step
             title={t("voice.doneTitle")}
-            subtitle={t("voice.doneBody")}
+            subtitle={`${t("voice.doneBody")} ${t("voice.doneLanguage", { language: LANGUAGES[clipLocale] })}`}
             actions={
               <button className="btn btn-primary" onClick={onClose}>
                 {t("voice.finish")}
@@ -215,7 +222,15 @@ function ConsentStep({ onConsent }: { onConsent: (owner: string) => void }) {
   );
 }
 
-function RecordStep({ onSample }: { onSample: (sample: Sample) => void }) {
+function RecordStep({
+  locale,
+  onLocale,
+  onSample,
+}: {
+  locale: Locale;
+  onLocale: (locale: Locale) => void;
+  onSample: (sample: Sample) => void;
+}) {
   const [recording, setRecording] = useState<Recording | null>(null);
   const [elapsed, setElapsed] = useState(0);
   const [error, setError] = useState<string | null>(null);
@@ -227,7 +242,11 @@ function RecordStep({ onSample }: { onSample: (sample: Sample) => void }) {
     if (!recording) return;
     const started = Date.now();
     const timer = setInterval(() => setElapsed(Math.floor((Date.now() - started) / 1000)), 250);
-    return () => clearInterval(timer);
+    return () => {
+      clearInterval(timer);
+      // Cancel closes the sheet mid-recording; without this the mic stays open until the 30 s limit.
+      recording.stop();
+    };
   }, [recording]);
 
   const record = async () => {
@@ -292,7 +311,28 @@ function RecordStep({ onSample }: { onSample: (sample: Sample) => void }) {
         </>
       }
     >
-      <p className="card reading">{t("voice.readingText")}</p>
+      <div>
+        <span className="field-label" id="clip-language">
+          {t("voice.languageLabel")}
+        </span>
+        <div className="segmented" role="group" aria-labelledby="clip-language">
+          {(Object.keys(LANGUAGES) as Locale[]).map((code) => (
+            <button
+              key={code}
+              type="button"
+              aria-pressed={code === locale}
+              disabled={!!recording || processing}
+              onClick={() => onLocale(code)}
+            >
+              {LANGUAGES[code]}
+            </button>
+          ))}
+        </div>
+      </div>
+      {/* In the clip's language, so a Spanish speaker reads a Spanish text. */}
+      <p className="card reading" lang={locale}>
+        {t("voice.readingText", {}, locale)}
+      </p>
       <div className="recorder">
         <div className={`live${recording ? " on" : ""}`} aria-hidden="true">
           <span className="timer">{formatTime(elapsed)}</span>

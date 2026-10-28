@@ -1,0 +1,10 @@
+{
+  "type": "language",
+  "v": 1,
+  "sessionId": "s_123",
+  "ts": 1729740009100,
+  "data": {
+    "locale": "es",
+    "supported": ["en", "es"]
+  }
+}

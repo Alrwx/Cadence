@@ -234,7 +234,21 @@ function listenerSay(s: Session, from: Role, raw: string): void {
   }, 600);
 }
 
-const INSTANT_TEXT: Record<string, string> = { yes: "Yes", no: "No", wait: "Give me a second", hello: "Hello", laugh: "Ha ha" };
+const INSTANT_TEXT: Record<string, Record<string, string>> = {
+  en: { yes: "Yes", no: "No", wait: "Give me a second", hello: "Hello", laugh: "Ha ha" },
+  es: { yes: "Sí", no: "No", wait: "Dame un segundo", hello: "Hola", laugh: "Ja ja" },
+};
+
+// One person, like the real gateway: the language is shared by every session. Suggestions stay canned English.
+const SUPPORTED_LOCALES = ["en", "es"];
+let locale = "en";
+
+function setLanguage(next: string): boolean {
+  if (!SUPPORTED_LOCALES.includes(next)) return false;
+  locale = next;
+  for (const s of sessions.values()) send(s, "all", "language", { locale, supported: SUPPORTED_LOCALES });
+  return true;
+}
 
 function handle(s: Session, from: Role, event: CadenceEvent): void {
   switch (event.type) {
@@ -251,7 +265,7 @@ function handle(s: Session, from: Role, event: CadenceEvent): void {
       listenerSay(s, from, event.data.text);
       break;
     case "instant":
-      speak(s, INSTANT_TEXT[event.data.phraseId] ?? event.data.phraseId, "instant");
+      speak(s, INSTANT_TEXT[locale]?.[event.data.phraseId] ?? event.data.phraseId, "instant");
       break;
     case "phrase.speak": {
       const phrase = s.groups.flatMap((g) => g.items).find((p) => p.id === event.data.phraseId);
@@ -335,6 +349,12 @@ function handle(s: Session, from: Role, event: CadenceEvent): void {
     case "compose.start":
       send(s, "all", "state", { state: "COMPOSING" });
       break;
+    case "language.set":
+      if (!setLanguage(event.data.locale)) {
+        send(s, from, "error", { code: "unsupported_language", message: "That language isn't available yet.", recoverable: true });
+        send(s, from, "language", { locale, supported: SUPPORTED_LOCALES });
+      }
+      break;
     case "compose.submit":
       speak(s, event.data.text, "typed");
       break;
@@ -404,7 +424,9 @@ async function handleApi(req: IncomingMessage, res: ServerResponse): Promise<voi
     }
     await new Promise((r) => setTimeout(r, VOICE_DELAY_MS)); // stands in for transcription + voice prompt
     const voiceId = `v_${++voiceCounter}`;
-    console.log(`voice ${voiceId} from ${body.length} bytes (consent ${consentId})`);
+    const sampleLocale = formField(body, "locale") || locale;
+    console.log(`voice ${voiceId} from ${body.length} bytes in ${sampleLocale} (consent ${consentId})`);
+    setLanguage(sampleLocale); // creating a voice switches the app to the clip's language
     return json(res, 201, { voiceId });
   }
   // Camera spike (docs/proposals/2026-10-25-pointing-at-objects.md, phase 0): log the report, keep nothing.
@@ -457,6 +479,7 @@ wss.on("connection", (ws, req) => {
   s.clients[role] = ws;
   console.log(`connected ${role} (session ${sessionId})`);
   send(s, role, "state", { state: "IDLE" });
+  send(s, role, "language", { locale, supported: SUPPORTED_LOCALES });
   sendPhrases(s, role);
   if (role === "headset") {
     send(s, "headset", "conversations", { items: s.conversations });

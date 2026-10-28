@@ -12,8 +12,8 @@ import (
 
 func TestCreateVoiceSendsMultipart(t *testing.T) {
 	var got struct {
-		consentID, transcript, fileName, contentType, audio string
-		hasTranscript                                       bool
+		consentID, transcript, locale, fileName, contentType, audio string
+		hasTranscript, hasLocale                                    bool
 	}
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost || r.URL.Path != "/voices" {
@@ -27,6 +27,8 @@ func TestCreateVoiceSendsMultipart(t *testing.T) {
 		got.consentID = r.FormValue("consentId")
 		_, got.hasTranscript = r.MultipartForm.Value["transcript"]
 		got.transcript = r.FormValue("transcript")
+		_, got.hasLocale = r.MultipartForm.Value["locale"]
+		got.locale = r.FormValue("locale")
 		file, header, err := r.FormFile("audio")
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
@@ -46,15 +48,16 @@ func TestCreateVoiceSendsMultipart(t *testing.T) {
 	if got.consentID != "consent_1" || got.audio != "RIFF" || got.fileName != "sample.webm" || got.contentType != "audio/webm" {
 		t.Fatalf("model service got %+v", got)
 	}
-	if got.hasTranscript {
-		t.Fatal("an empty transcript must be left out so the model service transcribes the sample")
+	if got.hasTranscript || got.hasLocale {
+		t.Fatal("an empty transcript or locale must be left out so the model service uses its defaults")
 	}
 
-	if _, err := c.CreateVoice(context.Background(), VoiceSample{Data: []byte("x"), FileName: "a.m4a", Transcript: "Hello there"}, "consent_1"); err != nil {
+	sample := VoiceSample{Data: []byte("x"), FileName: "a.m4a", Transcript: "Hola a todos", Locale: "es"}
+	if _, err := c.CreateVoice(context.Background(), sample, "consent_1"); err != nil {
 		t.Fatal(err)
 	}
-	if got.transcript != "Hello there" {
-		t.Fatalf("transcript = %q", got.transcript)
+	if got.transcript != "Hola a todos" || got.locale != "es" {
+		t.Fatalf("transcript = %q, locale = %q", got.transcript, got.locale)
 	}
 }
 

@@ -13,7 +13,6 @@ const FIELD_Y = 0.13;
 const FIELD_TEXT_X = -0.32;
 const ACTIONS_Y = -0.2;
 
-const LETTER_ROWS = ["qwertyuiop", "asdfghjkl'", "zxcvbnm,.?"];
 const LETTERS_TOP = 0.05;
 
 const WORDS_PER_ROW = 6;
@@ -89,7 +88,9 @@ function Field({ text }: { text: string }) {
 }
 
 function Letters({ onKey }: { onKey: (key: string) => void }) {
-  return LETTER_ROWS.map((row, r) =>
+  // Per language: Spanish swaps the apostrophe for ñ and adds the ´ dead key (´ then a vowel types á é í ó ú).
+  const rows = t("entry.letters.rows").split("|");
+  return rows.map((row, r) =>
     [...row].map((key, i) => (
       <Button3D
         key={key}

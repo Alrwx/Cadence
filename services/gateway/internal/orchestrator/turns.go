@@ -71,7 +71,7 @@ func (o *Orchestrator) sttStream(s *hub.Session, ss *sessionState) *models.STTSt
 	if !ss.sttFailedAt.IsZero() && time.Since(ss.sttFailedAt) < sttRetryAfter {
 		return nil
 	}
-	stream, err := o.models.OpenSTT(context.Background(), o.locale)
+	stream, err := o.models.OpenSTT(context.Background(), o.currentLocale())
 	if err != nil {
 		slog.Warn("stt unavailable", "session", s.ID, "err", err)
 		ss.sttFailedAt = time.Now()
@@ -257,7 +257,7 @@ func (o *Orchestrator) suggest(ctx context.Context, s *hub.Session, ss *sessionS
 		start := time.Now()
 		resp, err = o.models.Suggest(ctx, models.SuggestRequest{
 			TurnID: turnID, History: history, Style: models.Style{Phrases: []string{}},
-			Context: attached, Memories: memories, Locale: o.locale, N: suggestCount,
+			Context: attached, Memories: memories, Locale: o.currentLocale(), N: suggestCount,
 		})
 		outcome := suggestOutcome(ctx, err)
 		if err == nil && len(resp.Items) == 0 {
@@ -294,7 +294,7 @@ func (o *Orchestrator) suggest(ctx context.Context, s *hub.Session, ss *sessionS
 		}
 		item := protocol.SuggestionsItem{
 			ID: fmt.Sprintf("s_%s_%d", turnID, i), Text: it.Text, Kind: kind,
-			AudioReady: o.clipReady(bg, it.Text, o.locale),
+			AudioReady: o.clipReady(bg, it.Text, o.currentLocale()),
 		}
 		items[item.ID] = it.Text
 		out = append(out, item)
@@ -339,7 +339,7 @@ func (o *Orchestrator) finishSuggesting(ss *sessionState, turnID string, in sess
 // a finished clip is cached for next time either way.
 func (o *Orchestrator) prepareSuggestion(s *hub.Session, ss *sessionState, turnID string, item protocol.SuggestionsItem) {
 	ctx, _ := withTTSPurpose(context.Background(), s.ID, "suggestion")
-	if _, err := o.clipFor(ctx, item.Text, o.locale); err != nil {
+	if _, err := o.clipFor(ctx, item.Text, o.currentLocale()); err != nil {
 		slog.Warn("prepare suggestion", "session", s.ID, "turn", turnID, "err", err)
 		return
 	}

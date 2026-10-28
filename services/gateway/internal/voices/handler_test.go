@@ -49,9 +49,17 @@ func (f *fakeCloner) DeleteVoice(_ context.Context, id string) error {
 type fakeSetter struct {
 	voice     string
 	forgotten []string
+	locale    string
 }
 
 func (f *fakeSetter) SetVoice(id string) { f.voice = id }
+
+func (f *fakeSetter) Locale() string { return f.locale }
+
+func (f *fakeSetter) SetLocale(_ context.Context, locale string) error {
+	f.locale = locale
+	return nil
+}
 
 func (f *fakeSetter) ForgetVoices(ids []string) {
 	f.forgotten = append(f.forgotten, ids...)
@@ -77,8 +85,8 @@ func newHandler(t *testing.T) (*Handler, *fakeCloner, *fakeSetter) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	fc, fs := &fakeCloner{}, &fakeSetter{}
-	return &Handler{Store: st, Models: fc, Voices: fs, Clips: cc, PersonID: "p1", Locale: store.DefaultLocale}, fc, fs
+	fc, fs := &fakeCloner{}, &fakeSetter{locale: store.DefaultLocale}
+	return &Handler{Store: st, Models: fc, Voices: fs, Clips: cc, PersonID: "p1", Locales: []string{"en", "es"}}, fc, fs
 }
 
 func postConsent(h *Handler, body string) *httptest.ResponseRecorder {
@@ -164,6 +172,33 @@ func TestUploadCreatesVoiceAndSwitchesSessions(t *testing.T) {
 	}
 	if v, ok, _ := h.Store.ActiveVoice(context.Background(), "p1"); !ok || v != "mlx_voice_1" {
 		t.Fatalf("active voice = %q, %v", v, ok)
+	}
+	// No locale field: the sample is taken to be in the current language, which stays as it is.
+	if fc.sample.Locale != "en" || fs.locale != "en" {
+		t.Fatalf("sample locale = %q, app locale = %q", fc.sample.Locale, fs.locale)
+	}
+}
+
+// TestUploadInAnotherLanguageSwitchesTheApp: a Spanish sample is transcribed as Spanish, and creating the voice
+// moves the whole app to Spanish.
+func TestUploadInAnotherLanguageSwitchesTheApp(t *testing.T) {
+	h, fc, fs := newHandler(t)
+	consent := grantConsent(t, h)
+
+	rec := upload(h, []byte("webm-bytes"), map[string]string{"consentId": consent, "sessionId": "demo", "locale": "es"})
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("upload: %d %s", rec.Code, rec.Body)
+	}
+	if fc.sample.Locale != "es" || fs.locale != "es" {
+		t.Fatalf("sample locale = %q, app locale = %q", fc.sample.Locale, fs.locale)
+	}
+
+	rec = upload(h, []byte("webm-bytes"), map[string]string{"consentId": consent, "sessionId": "demo", "locale": "fr"})
+	if rec.Code != http.StatusBadRequest || decode(t, rec)["code"] != "unsupported_language" {
+		t.Fatalf("unsupported locale: %d %s", rec.Code, rec.Body)
+	}
+	if fc.calls != 1 || fs.locale != "es" {
+		t.Fatalf("an unsupported locale reached the model service (%d calls) or switched the app (%q)", fc.calls, fs.locale)
 	}
 }
 

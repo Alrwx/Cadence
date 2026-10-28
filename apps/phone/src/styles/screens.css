@@ -5,9 +5,21 @@
   justify-content: space-between;
 }
 
+.topbar-actions {
+  display: flex;
+  align-items: center;
+}
+
 .theme-toggle {
   margin-right: -8px;
   color: var(--muted);
+}
+
+.language-toggle {
+  color: var(--muted);
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
 }
 
 .pill {

@@ -2,6 +2,7 @@
 import type { AudioPlayData, CadenceEvent, ErrorData, PhrasesGroup, StateData, SuggestionsItem } from "@cadence/protocol";
 import { createStore } from "zustand/vanilla";
 import type { ConnectionStatus } from "./connection.ts";
+import { getLocale, setLocale, type Locale } from "./i18n.ts";
 
 export type SessionState = StateData["state"];
 
@@ -15,6 +16,9 @@ export interface CadenceState {
   phraseGroups: PhrasesGroup[];
   nowPlaying: AudioPlayData | null;
   lastError: ErrorData | null;
+  /** The UI and conversation language, from the gateway's language event. Subscribe to it to re-render strings. */
+  locale: Locale;
+  supportedLocales: string[];
   setConnection: (status: ConnectionStatus) => void;
   applyEvent: (event: CadenceEvent) => void;
 }
@@ -32,6 +36,8 @@ export const createCadenceStore = () =>
     phraseGroups: [],
     nowPlaying: null,
     lastError: null,
+    locale: getLocale(),
+    supportedLocales: [getLocale()],
     setConnection: (connection) => set({ connection }),
     applyEvent: (event) =>
       set((s) => {
@@ -59,6 +65,10 @@ export const createCadenceStore = () =>
             return { nowPlaying: event.data };
           case "error":
             return { lastError: event.data };
+          case "language":
+            // t() reads the module-level locale, so set it before subscribers re-render.
+            setLocale(event.data.locale);
+            return { locale: getLocale(), supportedLocales: event.data.supported };
           default:
             return {};
         }
