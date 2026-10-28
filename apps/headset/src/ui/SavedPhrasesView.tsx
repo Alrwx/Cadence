@@ -1,5 +1,6 @@
 // Saved phrases: a chip per group and big phrase tiles a page at a time. A phrase speaks as-is, or,
-// after "Edit first", opens in the compose keyboard. Adding and organizing phrases happens on the phone.
+// after "Edit first", opens in the compose keyboard. Each has a trash circle, so a bookmark can be undone here;
+// adding and organizing phrases happens on the phone.
 import { Text } from "@react-three/drei";
 import type { PhrasesGroup } from "@cadence/protocol";
 import { useState } from "react";
@@ -7,13 +8,15 @@ import { layout } from "../config.ts";
 import { rememberSpeech, send, useCadence } from "../session.ts";
 import { t } from "../strings.ts";
 import { Button3D } from "./Button3D.tsx";
-import { BackButton, HEADER_Y, Pager } from "./controls.tsx";
+import { BackButton, HEADER_Y, Pager, useConfirm } from "./controls.tsx";
 import { ignoreRays } from "./glass.ts";
 import { startCompose, useView } from "./views.ts";
 
 const COLUMNS = 2;
 const PAGE_SIZE = 6;
-const TILE_WIDTH = 0.34;
+const COLUMN_WIDTH = 0.34;
+const TILE_WIDTH = 0.274;
+const DELETE_SIZE = 0.052;
 const TILE_HEIGHT = 0.088;
 const TILE_RADIUS = 0.028;
 const COLUMN_X = 0.177;
@@ -33,6 +36,7 @@ export function SavedPhrasesView() {
   const group = groups.find((g) => g.id === groupId) ?? groups[0];
   const [page, setPage] = useState(0);
   const [editFirst, setEditFirst] = useState(false);
+  const { confirming, press } = useConfirm();
 
   const openGroup = (id: string) => {
     useView.setState({ groupId: id });
@@ -53,22 +57,51 @@ export function SavedPhrasesView() {
           {group ? t("saved.empty") : t("saved.noGroups")}
         </Text>
       )}
-      {shown.map((item, i) => (
-        <Button3D
-          key={item.id}
-          label={item.text}
-          width={TILE_WIDTH}
-          height={TILE_HEIGHT}
-          radius={TILE_RADIUS}
-          align="start"
-          position={[((i % COLUMNS) * 2 - 1) * COLUMN_X, TOP_ROW_Y - Math.floor(i / COLUMNS) * ROW_STEP, 0]}
-          onPress={() => {
-            if (editFirst) return startCompose(item.text);
-            rememberSpeech(item.text, false);
-            send("phrase.speak", { phraseId: item.id });
-          }}
-        />
-      ))}
+      {shown.map((item, i) => {
+        const position: [number, number, number] = [((i % COLUMNS) * 2 - 1) * COLUMN_X, TOP_ROW_Y - Math.floor(i / COLUMNS) * ROW_STEP, 0];
+        const remove = () => press(item.id, () => send("phrase.delete", { phraseId: item.id }));
+        // The confirm covers the tile and its trash circle, so a second press on the same spot deletes.
+        if (confirming === item.id) {
+          return (
+            <Button3D
+              key={item.id}
+              label={t("saved.confirmDelete", { text: item.text })}
+              variant="danger"
+              width={COLUMN_WIDTH}
+              height={TILE_HEIGHT}
+              radius={TILE_RADIUS}
+              position={position}
+              onPress={remove}
+            />
+          );
+        }
+        return (
+          <group key={item.id} position={position}>
+            <Button3D
+              label={item.text}
+              width={TILE_WIDTH}
+              height={TILE_HEIGHT}
+              radius={TILE_RADIUS}
+              align="start"
+              position={[(TILE_WIDTH - COLUMN_WIDTH) / 2, 0, 0]}
+              onPress={() => {
+                if (editFirst) return startCompose(item.text);
+                rememberSpeech(item.text, false);
+                send("phrase.speak", { phraseId: item.id });
+              }}
+            />
+            <Button3D
+              label={t("saved.delete", { text: item.text })}
+              icon="trash"
+              iconOnly
+              width={DELETE_SIZE}
+              height={DELETE_SIZE}
+              position={[(COLUMN_WIDTH - DELETE_SIZE) / 2, 0, 0]}
+              onPress={remove}
+            />
+          </group>
+        );
+      })}
       <Pager page={shownPage} pages={pages} onPage={setPage} halfSpan={PAGER_X} y={MIDDLE_ROW_Y} dotsY={DOTS_Y} />
       <Button3D
         label={editFirst ? t("saved.pickToEdit") : t("saved.editFirst")}

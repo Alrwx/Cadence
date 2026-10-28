@@ -26,6 +26,8 @@
   "saved.pickToEdit": "Pick one to edit",
   "saved.empty": "No saved phrases yet",
   "saved.noGroups": "No groups yet",
+  "saved.delete": "Delete “{text}”",
+  "saved.confirmDelete": "Really delete “{text}”?",
   "conversations.saveAs": "Save this talk as",
   "conversations.presets": "Doctor|Nurse|Family|Other",
   "conversations.label": "{preset} – {date}",
