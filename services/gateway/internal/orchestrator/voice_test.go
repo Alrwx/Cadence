@@ -57,6 +57,34 @@ func (o *Orchestrator) clipVoice(t *testing.T, voice, text, clipID string) {
 	}
 }
 
+// The default voice rebuilt from another recording keeps its voiceId, so its cached clips must be made again.
+func TestNewDefaultVoiceRecordingRemakesItsClips(t *testing.T) {
+	fm := &fakeModels{defaultVoice: "synthetic"}
+	o, headset, phone, _ := voiceSession(t, fm, "")
+	var phrases protocol.PhrasesData
+	headset.expect(protocol.TypePhrases, &phrases, func() bool { return allReady(&phrases) })
+	perVoice := fm.ttsCallsFor(defaultVoiceID)
+	before := sayYes(t, headset, phone)
+
+	fm.setDefaultVoice("recorded")
+	go o.warmClips() // as a headset connecting does
+	headset.expect(protocol.TypePhrases, &phrases, func() bool { return allReady(&phrases) })
+	if got := fm.ttsCallsFor(defaultVoiceID); got != 2*perVoice {
+		t.Fatalf("default voice clips = %d, want %d (each made again)", got, 2*perVoice)
+	}
+	after := sayYes(t, headset, phone)
+	if after == before {
+		t.Fatal("Yes still plays the clip made in the old recording")
+	}
+	o.clipVoice(t, defaultVoiceID, "Yes", after)
+
+	go o.warmClips()
+	time.Sleep(100 * time.Millisecond)
+	if got := fm.ttsCallsFor(defaultVoiceID); got != 2*perVoice {
+		t.Fatalf("an unchanged recording made %d more clips", got-2*perVoice)
+	}
+}
+
 // Demo step 6: switch to the generic voice for contrast, then back to the cloned one.
 func TestVoiceUseSwitchesBetweenClonedAndDefault(t *testing.T) {
 	fm := &fakeModels{}

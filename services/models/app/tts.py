@@ -8,6 +8,7 @@
   of 3 takes about as long as one reply (docs/latency.md).
 """
 
+import hashlib
 import json
 import logging
 import queue
@@ -101,6 +102,8 @@ class TtsService:
         self.default_audio, self.default_text = default_audio, default_text
         self.max_batch, self.batch_window = max_batch, batch_window_ms / 1000
         self.prompts: dict[str, Any] = {}
+        # Identifies the recording the default voice was built from; "" until it is built (at load).
+        self.default_version = ""
         self.jobs: queue.Queue[_Synth | _Call] = queue.Queue()
         self.held: list[_Synth | _Call] = []  # taken off the queue but not part of the current batch
         self.worker = threading.Thread(target=self._work, name="tts", daemon=True)
@@ -215,6 +218,8 @@ class TtsService:
                 audio, text = folder / "ref.wav", json.loads((folder / "meta.json").read_text("utf-8"))["transcript"]
             ref, sr = read_wav(str(audio))
             self.prompts[voice_id] = self.engine.make_prompt(resample(ref, sr, self.engine.sample_rate), text)
+            if voice_id == DEFAULT_VOICE:
+                self.default_version = hashlib.sha256(ref.tobytes() + text.encode()).hexdigest()[:16]
         return self.prompts[voice_id]
 
 

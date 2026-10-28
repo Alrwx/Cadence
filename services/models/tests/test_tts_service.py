@@ -3,7 +3,7 @@ from concurrent.futures import Future
 
 import pytest
 
-from app.tts import DEFAULT_VOICE, MAX_CHUNK_CHARS, UnknownVoice, max_tokens
+from app.tts import DEFAULT_VOICE, MAX_CHUNK_CHARS, TtsService, UnknownVoice, max_tokens
 from tests.conftest import FakeStt, FakeTtsEngine, make_tts, sample_wav
 
 
@@ -56,6 +56,20 @@ def test_voices_survive_a_restart(tmp_path):
     second = make_tts(tmp_path, engine)
     assert second.synthesize(voice_id, "Hello again.", "en").startswith(b"RIFF")
     assert engine.prompts == ["My voice."]  # rebuilt from the stored reference
+
+
+def test_the_default_voice_version_follows_its_recording(tmp_path):
+    other_audio, other_text = tmp_path / "ref.wav", tmp_path / "ref.txt"
+    other_audio.write_bytes(sample_wav())
+    other_text.write_text("Someone else.", encoding="utf-8")
+
+    synthetic, synthetic_again = make_tts(tmp_path), make_tts(tmp_path)
+    real = TtsService(FakeTtsEngine(), tmp_path / "voices", default_audio=other_audio, default_text=other_text)
+    for tts in (synthetic, synthetic_again, real):
+        tts.synthesize(DEFAULT_VOICE, "Yes", "en")
+
+    assert synthetic.default_version == synthetic_again.default_version != ""
+    assert real.default_version != synthetic.default_version
 
 
 def test_deleted_voices_are_gone(tmp_path):

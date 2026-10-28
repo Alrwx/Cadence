@@ -45,10 +45,17 @@ type fakeModels struct {
 	mu               sync.Mutex
 	suggestReqs      []models.SuggestRequest
 	summarizeReqs    [][]models.Turn
-	ttsVoices        map[string]int // /tts calls per voiceId
+	ttsVoices        map[string]int    // /tts calls per voiceId
 	ttsLocales       map[string]string // /tts text -> locale of the last request for it
 	sttLocales       []string          // locale of each /stt dial
-	deletedVoices    []string       // DELETE /voices/{id} calls
+	deletedVoices    []string          // DELETE /voices/{id} calls
+	defaultVoice     string            // /health's defaultVoice: which recording the default voice is built from
+}
+
+func (f *fakeModels) setDefaultVoice(version string) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.defaultVoice = version
 }
 
 func (f *fakeModels) ttsCallsFor(voice string) int {
@@ -76,6 +83,10 @@ func (f *fakeModels) suggestRequests() []models.SuggestRequest {
 
 func (f *fakeModels) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	switch r.URL.Path {
+	case "/health":
+		f.mu.Lock()
+		defer f.mu.Unlock()
+		_ = json.NewEncoder(w).Encode(models.Health{STT: "ready", Suggest: "ready", TTS: "ready", DefaultVoice: f.defaultVoice})
 	case "/tts":
 		f.ttsCalls.Add(1)
 		var req struct {

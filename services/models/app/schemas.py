@@ -13,6 +13,8 @@ class Health(BaseModel):
     suggest: Status
     tts: Status
     backend: str
+    # Changes when the "default" voice is pointed at another recording, so cached clips in it are stale.
+    defaultVoice: str
 
 
 class Turn(BaseModel):

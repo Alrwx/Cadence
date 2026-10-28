@@ -31,7 +31,13 @@ def client(models):
 def test_health_reports_loading_until_models_load(models):
     client = TestClient(create_app(models, load=False))
     body = client.get("/health").json()
-    assert body == {"stt": "loading", "suggest": "loading", "tts": "loading", "backend": body["backend"]}
+    assert body == {
+        "stt": "loading",
+        "suggest": "loading",
+        "tts": "loading",
+        "backend": body["backend"],
+        "defaultVoice": "",
+    }
     resp = client.post("/tts", json={"voiceId": "default", "text": "Yes"})
     assert resp.status_code == 503
     assert "tts is loading" in resp.json()["detail"]
