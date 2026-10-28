@@ -45,6 +45,7 @@ test("Clear in Settings puts the replies back on the panel", async ({ page }) =>
   await placeListener(page, "Place");
   await page.waitForFunction(() => window.cadence.useListener.getState().spot !== null);
   await lookAt(page, "Clear");
+  await page.waitForFunction(() => window.cadence.useListener.getState().spot === null);
   await lookAt(page, "Back");
   await expect.poll(() => replyToYes(page)).toBeCloseTo(onPanel, 2);
 });

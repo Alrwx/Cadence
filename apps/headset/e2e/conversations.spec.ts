@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
-import { enterAR, lookAt, remote, sent, targetCenter } from "./harness.ts";
+import { enterAR, lookAt, lookAway, sent, targetCenter } from "./harness.ts";
 
 // Presses go through head dwell: the emulated hand ray misses small buttons too often to pinch them reliably.
 // The mock gateway starts every session with one saved conversation, cv_lee.
@@ -12,8 +12,6 @@ test.beforeEach(async ({ page }, info) => {
 
 const sentData = async (page: Page, type: string) => (await sent(page)).filter((e) => e.type === type).map((e) => e.data);
 const labels = (page: Page) => page.evaluate(() => window.cadence.targets().map((t) => t.label));
-/** A dwell fires once per visit, so pressing the same button again means looking away first. */
-const lookAway = (page: Page) => remote(page, "look_at", { device: "headset", target: { x: 0, y: 3, z: -1 } });
 
 test("saving sends a dated label and the new conversation is listed", async ({ page }) => {
   await lookAt(page, "Doctor");
