@@ -59,6 +59,7 @@ type Orchestrator struct {
 	writer *dbWriter // metric, session and turn rows, written off the event path (metrics.go)
 
 	speculateAfter time.Duration // partial-transcript debounce before a speculative /suggest; 0 = default (speculation.go)
+	speakingSlack  time.Duration // how long past a clip's length SPEAKING waits for audio.done; 0 = default
 }
 
 type sessionState struct {
@@ -67,6 +68,7 @@ type sessionState struct {
 	machine      *session.Machine
 	turnID       string
 	turnSeq      int
+	playSeq      int               // audio.play events sent, so a SPEAKING timeout only ends the clip it was set for
 	suggestions  map[string]string // suggestion id -> text, for the current turn
 	history      []heardTurn
 	attached     []string           // saved conversation ids used as /suggest context (conversation.attach)
@@ -237,10 +239,48 @@ func (o *Orchestrator) speak(ctx context.Context, s *hub.Session, ss *sessionSta
 	ss.mu.Lock()
 	ss.addTurnLocked("user", text)
 	turnID := ss.turnID
+	ss.playSeq++
+	play := ss.playSeq
 	ss.mu.Unlock()
 	o.spoken(s.ID, source, selectedAt, tag) // queued before the send, so it's in by the time the phone hears it
 	_ = s.Send(ctx, hub.Phone, protocol.TypeAudioPlay, turnID, protocol.AudioPlayData{
 		ClipID: clipID, URL: "/clips/" + clipID + ".wav", Text: text, Source: source,
+	})
+	o.releaseSpeakingAfter(s, ss, play, clipID)
+}
+
+const (
+	defaultSpeakingSlack = 5 * time.Second  // fetching the clip and starting playback on the phone
+	unknownClipLength    = 30 * time.Second // a clip whose WAV header can't be read
+	maxClipLength        = 2 * time.Minute
+)
+
+// releaseSpeakingAfter goes back to LISTENING if the phone never says the clip finished. Its audio.done can be
+// lost for good, e.g. when the page reloads mid-clip, and SPEAKING drops every transcript and selection, so
+// without this the session would stay deaf until the gateway restarts. play ties the timer to this one clip.
+func (o *Orchestrator) releaseSpeakingAfter(s *hub.Session, ss *sessionState, play int, clipID string) {
+	length, ok := o.clips.Duration(clipID)
+	if !ok {
+		length = unknownClipLength
+	}
+	slack := o.speakingSlack
+	if slack == 0 {
+		slack = defaultSpeakingSlack
+	}
+	time.AfterFunc(min(length, maxClipLength)+slack, func() {
+		ss.mu.Lock()
+		if ss.playSeq != play || ss.machine.State() != session.Speaking {
+			ss.mu.Unlock()
+			return
+		}
+		next, err := ss.machine.Apply(session.ClipDone)
+		turnID := ss.turnID
+		ss.mu.Unlock()
+		if err != nil {
+			return
+		}
+		slog.Warn("no audio.done from the phone; back to listening", "session", s.ID, "clip", clipID)
+		s.Broadcast(context.Background(), protocol.TypeState, turnID, protocol.StateData{State: string(next)})
 	})
 }
 

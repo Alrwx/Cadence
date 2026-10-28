@@ -2,6 +2,7 @@ package orchestrator
 
 import (
 	"context"
+	"encoding/binary"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -27,6 +28,7 @@ import (
 type fakeModels struct {
 	ttsCalls atomic.Int64
 	delay    time.Duration // /tts latency
+	wav      []byte        // what /tts returns; nil = a few bytes that aren't a readable WAV
 
 	suggestDelay   time.Duration
 	suggestFail    bool
@@ -108,7 +110,11 @@ func (f *fakeModels) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 		time.Sleep(f.delay)
 		w.Header().Set("Content-Type", "audio/wav")
-		_, _ = w.Write([]byte("RIFF-fake-wav"))
+		if f.wav != nil {
+			_, _ = w.Write(f.wav)
+		} else {
+			_, _ = w.Write([]byte("RIFF-fake-wav"))
+		}
 	case "/suggest":
 		var req models.SuggestRequest
 		_ = json.NewDecoder(r.Body).Decode(&req)
@@ -902,6 +908,69 @@ func TestPhoneLeavingDuringSynthesisReleasesSpeaking(t *testing.T) {
 	if st := o.stateOf(o.session("s1")); st != session.Listening {
 		t.Fatalf("state = %s, want LISTENING", st)
 	}
+}
+
+// TestLostAudioDoneReleasesSpeaking: a phone page that reloads mid-clip never sends that clip's audio.done.
+// SPEAKING ends on its own once the clip would have finished, instead of dropping every transcript for good.
+func TestLostAudioDoneReleasesSpeaking(t *testing.T) {
+	const clip, slack = 200 * time.Millisecond, 100 * time.Millisecond
+	_, headset, phone := pairedSession(t, &fakeModels{wav: silentWAV(clip)},
+		func(o *Orchestrator) { o.speakingSlack = slack })
+
+	headset.send(protocol.TypeComposeSubmit, protocol.ComposeSubmitData{Text: "I would like some water"})
+	headset.expectState("SPEAKING")
+	var play protocol.AudioPlayData
+	phone.expect(protocol.TypeAudioPlay, &play, nil)
+	sent := time.Now()
+	headset.expectState("LISTENING")
+	if waited := time.Since(sent); waited < clip {
+		t.Fatalf("SPEAKING released after %v, before the %v clip could have finished", waited, clip)
+	}
+}
+
+// TestSpeakingTimeoutOnlyEndsItsOwnClip: the timeout for a clip that did report audio.done must not cut short
+// the next clip, which would let the mic transcribe the phone's own speaker.
+func TestSpeakingTimeoutOnlyEndsItsOwnClip(t *testing.T) {
+	const clip, slack = 400 * time.Millisecond, 100 * time.Millisecond
+	o, headset, phone := pairedSession(t, &fakeModels{wav: silentWAV(clip)},
+		func(o *Orchestrator) { o.speakingSlack = slack })
+
+	headset.send(protocol.TypeComposeSubmit, protocol.ComposeSubmitData{Text: "First reply"})
+	var play protocol.AudioPlayData
+	phone.expect(protocol.TypeAudioPlay, &play, nil)
+	first := time.Now()
+	phone.send(protocol.TypeAudioDone, protocol.AudioDoneData{ClipID: play.ClipID})
+	headset.expectState("LISTENING")
+
+	time.Sleep(clip / 2)
+	headset.send(protocol.TypeComposeSubmit, protocol.ComposeSubmitData{Text: "Second reply"})
+	phone.expect(protocol.TypeAudioPlay, &play, func() bool { return play.Text == "Second reply" })
+	time.Sleep(time.Until(first.Add(clip + slack + clip/4))) // the first clip's timeout has fired
+	if st := o.stateOf(o.session("s1")); st != session.Speaking {
+		t.Fatalf("state = %s while the second clip plays, want SPEAKING", st)
+	}
+	phone.send(protocol.TypeAudioDone, protocol.AudioDoneData{ClipID: play.ClipID})
+	headset.expectState("LISTENING")
+}
+
+// silentWAV is a mono 16-bit 24 kHz WAV of silence lasting d, as the model service's /tts returns.
+func silentWAV(d time.Duration) []byte {
+	const rate = 24000
+	data := int(rate*d/time.Second) * 2
+	b := make([]byte, 44+data)
+	copy(b, "RIFF")
+	binary.LittleEndian.PutUint32(b[4:], uint32(36+data))
+	copy(b[8:], "WAVEfmt ")
+	binary.LittleEndian.PutUint32(b[16:], 16)
+	binary.LittleEndian.PutUint16(b[20:], 1) // PCM
+	binary.LittleEndian.PutUint16(b[22:], 1) // mono
+	binary.LittleEndian.PutUint32(b[24:], rate)
+	binary.LittleEndian.PutUint32(b[28:], rate*2) // byte rate
+	binary.LittleEndian.PutUint16(b[32:], 2)
+	binary.LittleEndian.PutUint16(b[34:], 16)
+	copy(b[36:], "data")
+	binary.LittleEndian.PutUint32(b[40:], uint32(data))
+	return b
 }
 
 func (o *Orchestrator) phoneConnected(sessionID string) bool {
