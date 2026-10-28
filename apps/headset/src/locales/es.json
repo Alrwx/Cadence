@@ -26,6 +26,8 @@
   "saved.pickToEdit": "Elige una para editar",
   "saved.empty": "Todavía no hay frases guardadas",
   "saved.noGroups": "Todavía no hay grupos",
+  "saved.delete": "Borrar «{text}»",
+  "saved.confirmDelete": "¿Seguro que borras «{text}»?",
   "conversations.saveAs": "Guardar como",
   "conversations.presets": "Médico|Enfermería|Familia|Otro",
   "conversations.label": "{preset} – {date}",

@@ -267,7 +267,7 @@ Rules:
 ### 6.2 Gateway ↔ model service (HTTP on 127.0.0.1:8000)
 | Endpoint | Request | Response |
 |---|---|---|
-| `GET /health` | – | `{ stt, suggest, tts: "ready"\|"loading"\|"error", backend }` |
+| `GET /health` | – | `{ stt, suggest, tts: "ready"\|"loading"\|"error", backend, defaultVoice }` (`defaultVoice` changes when the default voice is rebuilt from another recording) |
 | `WS /stt?locale=en` | binary PCM16 16 kHz frames | JSON `{ kind: "partial"\|"final", text }` |
 | `POST /suggest` | `{ turnId, history: [{speaker, text}], style: {phrases[], tone}, context?: [{ label, summary }], memories?: [string], locale?: "en", n: 3 }` | `{ turnId, items: [{ text, kind }] , ms }` (`context` = attached saved conversations, `memories` = recent quick memories; both stretch) |
 | `POST /summarize` *(stretch)* | `{ turns: [{speaker, text}], locale?: "en" }` | `{ summary, ms }` (used for saved conversations and quick memories) |

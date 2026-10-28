@@ -1,4 +1,5 @@
 // Pieces every view shares: the Back circle, paging, and a tray of choices.
+import { useEffect, useState } from "react";
 import { ShapeGeometry, Shape } from "three";
 import { layout } from "../config.ts";
 import { t } from "../strings.ts";
@@ -25,6 +26,25 @@ export function BackButton() {
       onPress={() => showView({ kind: "main" })}
     />
   );
+}
+
+/**
+ * A delete that takes a second press on the same item. `confirming` is the item waiting for it; it stops waiting
+ * after layout.confirmMs.
+ */
+export function useConfirm() {
+  const [confirming, setConfirming] = useState<string | null>(null);
+  useEffect(() => {
+    if (!confirming) return;
+    const timer = setTimeout(() => setConfirming(null), layout.confirmMs);
+    return () => clearTimeout(timer);
+  }, [confirming]);
+  const press = (id: string, confirmed: () => void) => {
+    if (confirming !== id) return setConfirming(id);
+    setConfirming(null);
+    confirmed();
+  };
+  return { confirming, press };
 }
 
 interface PagerProps {

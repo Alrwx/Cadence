@@ -1,12 +1,11 @@
 // Quick memories the gateway passes to suggestions, each deletable.
 import { Text } from "@react-three/drei";
-import { useEffect, useState } from "react";
-import { layout } from "../config.ts";
+import { useState } from "react";
 import { useMemories } from "../memories.ts";
 import { send } from "../session.ts";
 import { t } from "../strings.ts";
 import { DeleteButton, ListTabs } from "./ConversationsView.tsx";
-import { Pager } from "./controls.tsx";
+import { Pager, useConfirm } from "./controls.tsx";
 import { GlassPanel } from "./GlassPanel.tsx";
 import { TEXT_HALO } from "./glass.ts";
 
@@ -18,15 +17,9 @@ const CARD_STEP = 0.084;
 export function MemoriesView() {
   const items = useMemories((s) => s.items);
   const [page, setPage] = useState(0);
-  const [confirming, setConfirming] = useState<string | null>(null);
+  const { confirming, press } = useConfirm();
   const pages = Math.max(1, Math.ceil(items.length / PAGE_SIZE));
   const shown = Math.min(page, pages - 1);
-
-  useEffect(() => {
-    if (!confirming) return;
-    const timer = setTimeout(() => setConfirming(null), layout.confirmMs);
-    return () => clearTimeout(timer);
-  }, [confirming]);
 
   return (
     <>
@@ -44,11 +37,7 @@ export function MemoriesView() {
             label={t("memories.delete")}
             confirmLabel={t("memories.confirmDelete")}
             x={0.308}
-            onPress={() => {
-              if (confirming !== m.id) return setConfirming(m.id);
-              setConfirming(null);
-              send("memory.delete", { memoryId: m.id });
-            }}
+            onPress={() => press(m.id, () => send("memory.delete", { memoryId: m.id }))}
           />
         </GlassPanel>
       ))}

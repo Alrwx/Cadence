@@ -185,3 +185,27 @@ func (s *Store) DeleteVoiceProfile(ctx context.Context, personID, profileID stri
 	}
 	return nil
 }
+
+// DefaultVoiceVersion returns the default voice version the cached clips were made in; "" if none is recorded.
+func (s *Store) DefaultVoiceVersion(ctx context.Context) (string, error) {
+	var version string
+	err := s.DB.QueryRowContext(ctx, `SELECT version FROM default_voice WHERE id = 1`).Scan(&version)
+	if errors.Is(err, sql.ErrNoRows) {
+		return "", nil
+	}
+	if err != nil {
+		return "", fmt.Errorf("default voice version: %w", err)
+	}
+	return version, nil
+}
+
+// SetDefaultVoiceVersion records the default voice version the cached clips are made in from now on.
+func (s *Store) SetDefaultVoiceVersion(ctx context.Context, version string) error {
+	_, err := s.DB.ExecContext(ctx, `
+		INSERT INTO default_voice (id, version) VALUES (1, ?) ON CONFLICT (id) DO UPDATE SET version = excluded.version`,
+		version)
+	if err != nil {
+		return fmt.Errorf("set default voice version: %w", err)
+	}
+	return nil
+}

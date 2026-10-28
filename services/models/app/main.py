@@ -90,7 +90,7 @@ def create_app(models: Models, load: bool = True) -> FastAPI:
 
     @app.get("/health")
     def health() -> Health:
-        return Health(**ready.status, backend=settings.backend)
+        return Health(**ready.status, backend=settings.backend, defaultVoice=models.tts.default_version)
 
     @app.websocket("/stt")
     async def stream_stt(ws: WebSocket, locale: str = "en") -> None:

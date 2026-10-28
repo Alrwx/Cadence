@@ -7,6 +7,7 @@ import (
 
 	protocol "github.com/Alrwx/Cadence/packages/protocol/go"
 	"github.com/Alrwx/Cadence/services/gateway/internal/hub"
+	"github.com/Alrwx/Cadence/services/gateway/internal/models"
 	"github.com/Alrwx/Cadence/services/gateway/internal/store"
 )
 
@@ -86,6 +87,7 @@ func (o *Orchestrator) warmClips() {
 
 func (o *Orchestrator) warmOnce(voice string) {
 	ctx, _ := withTTSPurpose(context.Background(), "", "warm")
+	o.dropStaleDefaultClips(ctx)
 
 	type item struct{ text, locale string }
 	var todo []item
@@ -126,6 +128,44 @@ func (o *Orchestrator) warmOnce(voice string) {
 		for _, s := range o.hubSessions() {
 			o.sendPhrases(ctx, s)
 		}
+	}
+}
+
+// dropStaleDefaultClips deletes the default voice's cached clips once the model service reports it was rebuilt
+// from another recording (DEFAULT_VOICE_AUDIO). Its voiceId stays "default", so the cache can't tell them apart.
+func (o *Orchestrator) dropStaleDefaultClips(ctx context.Context) {
+	healthCtx, cancel := context.WithTimeout(ctx, models.TTSTimeout)
+	h, err := o.models.Health(healthCtx)
+	cancel()
+	if err != nil || h.DefaultVoice == "" {
+		return // the model service is down or still loading; the next warm-up checks again
+	}
+	had, err := o.store.DefaultVoiceVersion(ctx)
+	if err != nil {
+		slog.Error("default voice version", "err", err)
+		return
+	}
+	if had == h.DefaultVoice {
+		return
+	}
+	ids, err := o.store.VoiceClips(ctx, defaultVoiceID)
+	if err != nil {
+		slog.Error("stale default voice clips", "err", err)
+		return
+	}
+	for _, id := range ids {
+		_ = o.clips.Remove(id)
+	}
+	if err := o.store.DeleteVoiceClips(ctx, defaultVoiceID, ids); err != nil {
+		slog.Error("stale default voice clips", "err", err)
+		return
+	}
+	if err := o.store.SetDefaultVoiceVersion(ctx, h.DefaultVoice); err != nil {
+		slog.Error("default voice version", "err", err)
+		return
+	}
+	if len(ids) > 0 {
+		slog.Info("default voice changed; dropped its cached clips", "count", len(ids))
 	}
 }
 

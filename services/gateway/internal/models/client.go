@@ -71,6 +71,8 @@ type Health struct {
 	Suggest string `json:"suggest"`
 	TTS     string `json:"tts"`
 	Backend string `json:"backend"`
+	// DefaultVoice changes when the "default" voice is rebuilt from another recording; "" until it is built.
+	DefaultVoice string `json:"defaultVoice"`
 }
 
 func (c *Client) Health(ctx context.Context) (Health, error) {

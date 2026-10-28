@@ -1,12 +1,11 @@
 // Save the current conversation, and attach saved ones as context for this session's suggestions.
 import { Text } from "@react-three/drei";
-import { useEffect, useState } from "react";
-import { layout } from "../config.ts";
+import { useState } from "react";
 import { toggleAttached, useConversations } from "../conversations.ts";
 import { send } from "../session.ts";
 import { t } from "../strings.ts";
 import { Button3D } from "./Button3D.tsx";
-import { BackButton, HEADER_Y, Pager, Segmented } from "./controls.tsx";
+import { BackButton, HEADER_Y, Pager, Segmented, useConfirm } from "./controls.tsx";
 import { ACCENT, TEXT_HALO } from "./glass.ts";
 import { GlassPanel } from "./GlassPanel.tsx";
 import { Icon3D } from "./Icon3D.tsx";
@@ -76,15 +75,9 @@ export function ConversationsView() {
   const attached = useConversations((s) => s.attached);
   const [page, setPage] = useState(0);
   const [savedAs, setSavedAs] = useState<string | null>(null);
-  const [confirming, setConfirming] = useState<string | null>(null);
+  const { confirming, press } = useConfirm();
   const pages = Math.max(1, Math.ceil(items.length / PAGE_SIZE));
   const shown = Math.min(page, pages - 1);
-
-  useEffect(() => {
-    if (!confirming) return;
-    const timer = setTimeout(() => setConfirming(null), layout.confirmMs);
-    return () => clearTimeout(timer);
-  }, [confirming]);
 
   const save = (preset: string) => {
     const date = new Date().toLocaleDateString(getLocale(), { month: "short", day: "numeric" });
@@ -161,11 +154,7 @@ export function ConversationsView() {
               label={t("conversations.delete")}
               confirmLabel={t("conversations.confirmDelete")}
               x={0.308}
-              onPress={() => {
-                if (confirming !== c.id) return setConfirming(c.id);
-                setConfirming(null);
-                send("conversation.delete", { conversationId: c.id });
-              }}
+              onPress={() => press(c.id, () => send("conversation.delete", { conversationId: c.id }))}
             />
           </GlassPanel>
         );

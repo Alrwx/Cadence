@@ -24,6 +24,14 @@ test("Edit first opens the phrase in the keyboard, and the edit is spoken as typ
   expect(await lastSent(page, "phrase.speak")).toBeUndefined();
 });
 
+test("deleting a saved phrase takes a second press", async ({ page }) => {
+  await pinch(page, "Delete “I'm in pain”");
+  expect(await lastSent(page, "phrase.delete")).toBeUndefined();
+  await pinch(page, "Really delete “I'm in pain”?");
+  await expect.poll(() => lastSent(page, "phrase.delete")).toEqual({ phraseId: "ph_pain" });
+  await expect.poll(async () => (await page.evaluate(() => window.cadence.targets().map((t) => t.label))).includes("I'm in pain")).toBe(false);
+});
+
 test("the save chip saves the last reply to the group last opened", async ({ page }) => {
   await pinch(page, "Home");
   await pinch(page, "Back");
