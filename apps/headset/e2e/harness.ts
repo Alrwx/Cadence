@@ -25,6 +25,7 @@ declare global {
       xrStore: XRStore;
       emulator: XRDevice;
       targets: () => { label: string; center: Vec3 }[];
+      hovered: () => string | null;
     };
   }
 }
@@ -77,7 +78,18 @@ export async function lookAt(page: Page, label: string): Promise<void> {
   const target = await targetCenter(page, label);
   // A button that appears under the gaze never fires, so let the head pointer see it before looking at it.
   await waitFrames(page, 2);
+  // A dwell fires once per visit, and one already under the gaze (say, it appeared there) has had its visit, so
+  // arrive from elsewhere the way a real head would.
+  if ((await page.evaluate(() => window.cadence.hovered())) === label) {
+    await lookAway(page);
+    await waitFrames(page, 2);
+  }
   await remote(page, "look_at", { device: "headset", target });
+}
+
+/** Looks up and away from every panel, so the next look at a button starts a new dwell. */
+export function lookAway(page: Page): Promise<unknown> {
+  return remote(page, "look_at", { device: "headset", target: { x: 0, y: 3, z: -1 } });
 }
 
 /** Angle in degrees between where the head looks and the direction from the head to a button. */

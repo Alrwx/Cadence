@@ -141,8 +141,6 @@ function ChipSlot({ disabled }: { disabled: boolean }) {
     const timer = setTimeout(() => useMemories.setState({ justSaved: null }), NOTICE_MS);
     return () => clearTimeout(timer);
   }, [justSaved]);
-  // Leaving the main view ends the chance to undo, so a memory that arrives meanwhile isn't announced on return.
-  useEffect(() => () => useMemories.setState({ justSaved: null, awaiting: false }), []);
 
   if (justSaved) {
     return (

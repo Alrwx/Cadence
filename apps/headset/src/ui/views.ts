@@ -2,6 +2,7 @@
 import { useEffect } from "react";
 import { create } from "zustand";
 import { useConsent } from "../consent.ts";
+import { useMemories } from "../memories.ts";
 import { send, useCadence } from "../session.ts";
 
 export type View =
@@ -28,10 +29,18 @@ interface ViewState {
 
 export const useView = create<ViewState>(() => ({ view: { kind: "main" }, groupId: null, draft: "", notice: null }));
 
-export const showView = (view: View) => useView.setState({ view });
+// Leaving the main view ends the chance to undo, so a memory that arrives meanwhile isn't announced on return.
+// Done here rather than when the main view unmounts: StrictMode's trial unmount would drop the memory Allow just asked for.
+const forgetPendingMemory = () => useMemories.setState({ justSaved: null, awaiting: false });
+
+export function showView(view: View): void {
+  if (view.kind !== "main") forgetPendingMemory();
+  useView.setState({ view });
+}
 
 /** Opens "Type my own", empty or with a saved phrase to edit before speaking. */
 export function startCompose(draft = ""): void {
+  forgetPendingMemory();
   useView.setState({ draft });
   send("compose.start", {});
 }
